@@ -5,6 +5,16 @@ scripts_dir=$(dirname ${scripts})
 
 source ${scripts_dir}/box.config
 
+uid_list=()
+
+find_packages_uid() {
+  for user in $(ls /data/user/) ; do
+    for package in ${packages_list[@]} ; do
+      uid_list[${#uid_list[@]}]=$(pm list packages -U --user ${user} | grep ${package} | awk -F 'uid:' '{print $2}')
+    done
+  done
+}
+
 start_tproxy() {
   ip rule add fwmark ${id} lookup ${id}
   ip route add local default dev lo table ${id}
@@ -56,7 +66,7 @@ start_tproxy() {
     ${iptables} -t mangle -I BOX_LOCAL -o ${ignore} -j RETURN
   done
 
-  # Bypass intranet    
+  # Bypass intranet
   if [ "${bin_name}" == "clash" ] ; then
     for subnet in ${intranet[@]} ; do
       ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -j RETURN
@@ -70,20 +80,42 @@ start_tproxy() {
 
   # Bypass box itself
   ${iptables} -t mangle -I BOX_LOCAL -m owner --uid-owner 0 --gid-owner 3005 -j RETURN
-    
+
   # ${iptables} -t mangle -I BOX_LOCAL -j RETURN -m mark --mark ${routing_mark}
 
   # Disable kernel
-  ${iptables} -t mangle -A BOX_LOCAL -m owner ! --uid 0-99999 -j DROP
+  # ${iptables} -t mangle -A BOX_LOCAL -m owner ! --uid 0-99999999 -j DROP
 
-  # Bypass AIDs
-  # for AID in ${AIDs[@]} ; do
-  #   ${iptables} -t mangle -A BOX_LOCAL -m owner --uid-owner ${AID} -j RETURN
-  # done
+  find_packages_uid
 
-  # Route Everything
-  ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark ${id}
-  ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
+  if [ "${mode}" = "blacklist" ] ; then
+    if [ "${uid_list}" = "" ] ; then
+      # Route Everything
+      ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark ${id}
+      ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
+      log "[Info]: transparent proxy for all apps."
+    else
+      # Bypass apps
+      for appid in ${uid_list[@]} ; do
+        ${iptables} -t mangle -I BOX_LOCAL -m owner --uid-owner ${appid} -j RETURN
+      done
+      # Allow !app
+      ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark ${id}
+      ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
+      log "[Info]: mode: ${mode} ${packages_list[@]} has no transparent proxy."
+    fi
+  elif [ "${proxy_mode}" = "whitelist" ] ; then
+    # Route apps to Xray
+    for appid in ${appid_list[@]} ; do
+      ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
+      ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
+    done
+    ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j MARK --set-mark ${id}
+    ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 0 -j MARK --set-mark ${id}
+    ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
+    ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
+    log "mode: ${mode} ${packages_list[@]} transparent proxy."
+  fi
 
   ${iptables} -t mangle -I OUTPUT -j BOX_LOCAL
 
@@ -178,28 +210,35 @@ enable_ipv6() {
   echo 0 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6
 }
 
-case "$1" in
-  enable)
-    stop_tproxy >> /dev/null 2>&1
-    sleep 1
-    disable_ipv6
-    log "[Info]: creating iptables transparent proxy rules."
-    start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
-    ;;
-  disable)
-    log "[Warning]: cleaning up iptables transparent proxy rules."
-    stop_tproxy >> /dev/null 2>&1 || log "[Warning]: clean up iptables transparent proxy rules done."
-    enable_ipv6
-    ;;
-  renew)
-    log "[Warning]: cleaning up iptables transparent proxy rules."
-    stop_tproxy >> /dev/null 2>&1 || log "[Warning]: clean up iptables transparent proxy rules done."
-    sleep 3
-    disable_ipv6
-    log "[Info]: creating iptables transparent proxy rules."
-    start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
-    ;;
-  *)
-    echo "$0:  usage:  $0 {enable|disable|renew}"
-    ;;
-esac
+if [ "${mode}" != "core" ] ; then
+  case "$1" in
+    enable)
+      stop_tproxy >> /dev/null 2>&1
+      sleep 1
+      disable_ipv6
+      log "[Info]: creating iptables transparent proxy rules."
+      start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+      ;;
+    disable)
+      log "[Warning]: cleaning up iptables transparent proxy rules."
+      stop_tproxy >> /dev/null 2>&1
+      log "[Warning]: clean up iptables transparent proxy rules done."
+      enable_ipv6
+      ;;
+    renew)
+      log "[Warning]: cleaning up iptables transparent proxy rules."
+      stop_tproxy >> /dev/null 2>&1
+      log "[Warning]: clean up iptables transparent proxy rules done."
+      sleep 3
+      disable_ipv6
+      log "[Info]: creating iptables transparent proxy rules."
+      start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+      ;;
+    *)
+      echo "$0:  usage:  $0 {enable|disable|renew}"
+      ;;
+  esac
+else
+  stop_tproxy >> /dev/null 2>&1
+  log "[Info]: mode: ${mode} disable transparent proxy."
+fi
