@@ -1,0 +1,155 @@
+#!/bin/sh
+
+scripts=$(realpath $0)
+scripts_dir=$(dirname ${scripts})
+
+source ${scripts_dir}/box.config
+
+mkdir -p ${run_path}
+mkdir -p ${box_path}/${bin_name}
+
+# ${box_path}/bin/yq -i ".tproxy-port=${tproxy_port}" ${box_path}/clash/config.yaml
+# ${box_path}/bin/yq -i ".dns.listen=\"${clash_dns_listen}\"" ${box_path}/clash/config.yaml
+# ${box_path}/bin/yq -i ".dns.fake-ip-range=\"${clash_fake_ip_range}\"" ${box_path}/clash/config.yaml
+
+# ${box_path}/bin/yq -o=json -i "(.inbounds[] | select(.type == \"tproxy\") | .listen_port) = ${tproxy_port}" ${box_path}/sing-box/config.json
+
+find_netstat_path() {
+  [ -f /system/bin/netstat ] && alias netstat="/system/bin/netstat" && return 0
+  [ -f /system/xbin/netstat ] && alias netstat="/system/xbin/netstat" && return 0
+  return 1
+}
+
+probe_bin_alive() {
+  [ -f ${pid_file} ] && cmd_file="/proc/$(cat ${pid_file})/cmdline" || return 1
+  [ -f ${cmd_file} ] && grep -q ${bin_path} ${cmd_file} && return 0 || return 1
+}
+
+start_bin() {
+  ulimit -SHn 1000000
+  if [ "${bin_name}" == "sing-box" ] ; then
+    ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 
+    if [ "$?" = "0" ] ; then
+      log "[Info]: starting ${bin_name} service."
+      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      echo -n $! > ${pid_file}
+    else
+      log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
+      return 2
+    fi
+  elif [ "${bin_name}" == "clash" ] ; then
+    ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1
+    if [ "$?" = "0" ] ; then
+      log "[Info]: starting ${bin_name} service."
+      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      echo -n $! > ${pid_file}
+    else
+      log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
+      return 2
+    fi
+  elif [ "${bin_name}" == "xray" ] ; then
+    ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1
+    if [ "$?" = "0" ] ; then
+      log "[Info]: starting ${bin_name} service."
+      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      echo -n $! > ${pid_file}
+    else
+      log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
+      return 2
+    fi
+  elif [ "${bin_name}" == "v2ray" ] ; then
+    ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1
+    if [ "$?" = "0" ] ; then
+      log "[Info]: starting ${bin_name} service."
+      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      echo -n $! > ${pid_file}
+    else
+      log "[Error]: kernel error."
+      return 3
+    fi
+  fi
+}
+
+display_bin_pid() {
+  if probe_bin_alive ; then
+    log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
+    return 0
+  else
+    log "[Info]: ${bin_name} service is stopped."
+    return 1
+  fi
+}
+
+wait_bin_listen() {
+  wait_count=0
+  bin_pid=$(cat ${pid_file})
+  find_netstat_path && \
+  check_bin_cmd="netstat -tnulp | grep ${bin_name} >> /dev/null" || \
+  check_bin_cmd="ls -lh /proc/${bin_pid}/fd | grep -q socket"
+  while probe_bin_alive && ! eval "${check_bin_cmd}" && [ ${wait_count} -lt 100 ] ; do
+    sleep 1 ; wait_count=$((${wait_count} + 1))
+  done
+  if probe_bin_alive && eval "${check_bin_cmd}" ; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+start_service() {
+  if probe_bin_alive ; then
+    log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
+    return 0
+  fi
+
+  # if [[ ${bin_name_list[@]} =~ ${bin_name} ]] && [ -f ${bin_path} ] ; then
+  if echo "${bin_name_list[@]}" | grep -w "${bin_name}" > /dev/null 2>&1 && [ -f ${bin_path} ] ; then
+    start_bin
+    if wait_bin_listen ; then
+      log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
+      return 0
+    else
+      if probe_bin_alive ; then
+        log "[Warning]: ${bin_name} service is running but may not listening. ( PID: $(cat ${pid_file}) )"
+        return 0
+      else
+        log "[Error]: Start ${bin_name} service Failed."
+        rm -f ${pid_file}
+        return 4
+      fi
+    fi
+  else
+    log "[Error]: ${bin_name} kernel missing."
+    return 1
+  fi
+}
+
+stop_service() {
+  if display_bin_pid ; then
+    log "[Info]: stopping ${bin_name} service."
+    kill $(cat ${pid_file}) || killall ${bin_name}
+    sleep 1
+    display_bin_pid
+  fi
+  rm -f ${pid_file}
+}
+
+case "$1" in
+  start)
+    start_service
+    ;;
+  stop)
+    stop_service
+    ;;
+  restart)
+    stop_service
+    sleep 2
+    start_service
+    ;;
+  status)
+    display_bin_pid
+    ;;
+  *)
+    echo "$0:  usage:  $0 {start|stop|restart|status}"
+    ;;
+esac

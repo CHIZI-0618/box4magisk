@@ -1,0 +1,168 @@
+{
+  "log": {
+    "disabled": false,
+    "level": "debug",
+    "output": "sing-box.log",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "google",
+        "address": "tcp://8.8.8.8",
+        "detour": "Proxy"
+      },
+      {
+        "tag": "alidns",
+        "address": "https://223.5.5.5/dns-query",
+        "detour": "direct"
+      },
+      {
+        "tag": "dnspod",
+        "address": "https://1.12.12.12/dns-query",
+        "detour": "direct"
+      },
+      {
+        "tag": "rcode",
+        "address": "rcode://name_error",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "domain_suffix": [
+          "节点域名"
+        ],
+        "domain_keyword": [
+          "ntp"
+        ],
+        "domain_regex": [
+          "(^|\\.)(alt[1-8]-mtalk|mtalk|mtalk4)\\.google\\.com$"
+        ],
+        "server": "dnspod",
+        "disable_cache": false
+      },
+      {
+        "geosite": "category-ads-all",
+        "server": "rcode",
+        "disable_cache": true
+      },
+      {
+        "geosite": [
+          "cn",
+          "microsoft@cn",
+          "apple@cn",
+          "category-games@cn"
+        ],
+        "server": "dnspod"
+      }
+    ],
+    "strategy": "prefer_ipv4",
+    "final": "google"
+  },
+  "inbounds": [
+    {
+      "type": "tproxy",
+      "tag": "tproxy-in",
+      "listen": "::",
+      "listen_port": 1536,
+      "sniff": true,
+      "sniff_override_destination": true,
+      "domain_strategy": "prefer_ipv4"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    },
+    {
+      "type": "dns",
+      "tag": "dns-out"
+    },
+    {
+      "type": "socks",
+      "tag": "socks-out",
+      "server": "127.0.0.1",
+      "server_port": 7890
+    },
+    {
+      "type": "selector",
+      "tag": "Proxy",
+      "outbounds": [
+        "socks-out"
+      ]
+    }
+  ],
+  "route": {
+    "geoip": {
+      "download_url": "",
+      "download_detour": "Proxy"
+    },
+    "geosite": {
+      "download_url": "",
+      "download_detour": "Proxy"
+    },
+    "rules": [
+      {
+        "protocol": "dns",
+        "outbound": "dns-out"
+      },
+      {
+        "port": [
+          123
+        ],
+        "port_range": [
+          "5228:5230"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "geosite": "category-ads-all",
+        "outbound": "block"
+      },
+      {
+        "geosite": [
+          "microsoft@cn",
+          "apple@cn",
+          "category-games@cn"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "geosite": [
+          "geolocation-!cn"
+        ],
+        "outbound": "Proxy"
+      },
+      {
+        "geosite": [
+          "cn"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "geoip": [
+          "cn",
+          "private"
+        ],
+        "outbound": "direct"
+      }
+    ],
+//    "auto_detect_interface": true,
+//    "default_mark": 233,
+    "find_process": true,
+    "final": "Proxy"
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9998",
+      "external_ui": "dashboard",
+      "store_selected": true
+    }
+  }
+}

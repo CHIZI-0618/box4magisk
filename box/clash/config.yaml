@@ -1,0 +1,107 @@
+mixed-port: 7890
+tproxy-port: 1536
+allow-lan: true
+mode: rule
+geodata-mode: true
+unified-delay: true
+log-level: debug
+ipv6: false
+external-controller: 127.0.0.1:9999
+external-ui: Dashboard
+# tcp-concurrent: true
+enable-process: false
+
+profile:
+  store-selected: true
+  store-fake-ip: false
+
+tun:
+  enable: false
+  stack: system # or gvisor
+  dns-hijack:
+    - 'any:53'
+  auto-route: true
+  auto-detect-interface: true
+
+sniffer: {enable: false, sniffing: [tls, http], skip-domain: ['Mijia Cloud', '+.apple.com'], force-domain: [], port-whitelist: [80, 443, 8000-9000]}
+
+hosts:
+  '+.clash.meta': 127.0.0.1
+
+dns:
+  enable: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  use-hosts: true
+  fake-ip-filter: ['connect.rom.miui.com', '+.gstatic.com', '*', '+.lan', '+.stun.*.*', '+.stun.*.*.*', '+.stun.*.*.*.*', '+.stun.*.*.*.*.*', 'lens.l.google.com', '*.mcdn.bilivideo.cn']
+  fake-ip-range: 28.0.0.1/8
+  proxy-server-nameserver:
+    - 'https://223.5.5.5/dns-query'
+    - 'https://1.12.12.12/dns-query'
+  default-nameserver:
+    - 'https://223.5.5.5/dns-query'
+    - 'https://1.12.12.12/dns-query'
+  nameserver:
+    - 'https://223.5.5.5/dns-query'   # alidns
+    - 'https://1.12.12.12/dns-query'   # dns.pub
+  fallback:
+    - 'tcp://185.222.222.222#Proxy'  # dns.sb
+    - 'tcp://94.140.15.15#Proxy'     # adguard
+    - 'tcp://8.8.4.4#Proxy'          # google
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    geosite:
+      - '!CN'
+#      - GFW
+#      - GREATFIRE
+#    domain:
+#      - '+.gstatic.com'
+
+proxy-providers:
+  机场一:
+    type: http
+    url: 机场一订阅链接
+    interval: 86400
+    path: ./1.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 600
+
+  机场二:
+    type: http
+    url: 机场二订阅链接
+    interval: 86400
+    path: ./2.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 600
+
+proxy-groups:
+  - name: Proxy
+    type: select
+    use:
+      - 机场一
+      - 机场二
+
+  - name: 广告拦截
+    type: select
+    proxies:
+      - REJECT
+      - PASS
+
+rules:
+  - AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT
+  - AND,((NETWORK,UDP),(OR,((GEOSITE,YOUTUBE),(GEOSITE,BILIBILI)))),REJECT
+  - GEOSITE,CATEGORY-ADS-ALL,广告拦截
+  - GEOSITE,MICROSOFT@CN,DIRECT
+  - GEOSITE,APPLE@CN,DIRECT
+  - GEOSITE,CATEGORY-GAMES@CN,DIRECT
+  - GEOSITE,GEOLOCATION-!CN,Proxy
+  - GEOSITE,CN,DIRECT
+  - GEOIP,CN,DIRECT
+  - GEOIP,PRIVATE,DIRECT,no-resolve
+  - MATCH,Proxy
