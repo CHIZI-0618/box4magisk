@@ -11,15 +11,15 @@ monitor_dir=$2
 monitor_file=$3
 
 service_control() {
-    if [ ! -f /data/adb/box/manual ] ; then
-        if [ "${monitor_file}" = "disable" ] ; then
-            if [ "${events}" = "d" ] ; then
-                ${service_path} start && ${tproxy_path} enable
-            elif [ "${events}" = "n" ] ; then
-                ${service_path} stop && ${tproxy_path} disable
-            fi
-        fi
+  if [ ! -f /data/adb/box/manual ] ; then
+    if [ "${monitor_file}" = "disable" ] ; then
+      if [ "${events}" = "d" ] ; then
+        ${service_path} start && ${tproxy_path} enable
+      elif [ "${events}" = "n" ] ; then
+        ${service_path} stop && ${tproxy_path} disable
+      fi
     fi
+  fi
 }
 
 service_control

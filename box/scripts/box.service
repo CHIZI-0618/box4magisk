@@ -64,9 +64,12 @@ start_bin() {
       nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
     else
-      log "[Error]: kernel error."
-      return 3
+      log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
+      return 2
     fi
+  else
+    log "[Error]: core error."
+    return 3
   fi
 }
 
@@ -103,7 +106,7 @@ start_service() {
   fi
 
   # if [[ ${bin_name_list[@]} =~ ${bin_name} ]] && [ -f ${bin_path} ] ; then
-  if echo "${bin_name_list[@]}" | grep -w "${bin_name}" > /dev/null 2>&1 && [ -f ${bin_path} ] ; then
+  if [ -f ${bin_path} ] ; then
     start_bin
     if wait_bin_listen ; then
       log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
@@ -113,13 +116,13 @@ start_service() {
         log "[Warning]: ${bin_name} service is running but may not listening. ( PID: $(cat ${pid_file}) )"
         return 0
       else
-        log "[Error]: Start ${bin_name} service Failed."
+        log "[Error]: start ${bin_name} service failed, please check the ${run_path}/error_${bin_name}.log file."
         rm -f ${pid_file}
         return 4
       fi
     fi
   else
-    log "[Error]: ${bin_name} kernel missing."
+    log "[Error]: missing ${bin_name} core, please download and place it in the ${box_path}/bin/ directory"
     return 1
   fi
 }
