@@ -107,6 +107,10 @@ start_service() {
 
   # if [[ ${bin_name_list[@]} =~ ${bin_name} ]] && [ -f ${bin_path} ] ; then
   if [ -f ${bin_path} ] ; then
+    chown 0:3005 ${bin_path}
+    chmod 0700 ${bin_path}
+    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
+    # setcap 'cap_net_admin,cap_net_raw+ep' ${bin_path}
     start_bin
     if wait_bin_listen ; then
       log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
