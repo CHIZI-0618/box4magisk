@@ -1,6 +1,8 @@
-#!/system/bin/sh
+#!/bin/sh
 
-MODDIR=/data/adb/modules/box4magisk
+module_dir="/data/adb/modules/box4magisk"
+
+[ -n "$(magisk -v | grep lite)" ] && module_dir=/data/adb/lite_modules/box4magisk
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
@@ -18,7 +20,7 @@ wait_until_login(){
 
 wait_until_login
 
-if [ ! -f /data/adb/box/manual ] && [ ! -f ${MODDIR}/disable ] ; then
+if [ ! -f /data/adb/box/manual ] && [ ! -f ${module_dir}/disable ] ; then
   mv /data/adb/box/run/run.log /data/adb/box/run/run.log.bak
   ${scripts_dir}/box.service start && ${scripts_dir}/box.tproxy enable
 fi
