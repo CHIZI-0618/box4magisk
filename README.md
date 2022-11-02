@@ -2,6 +2,7 @@
 
 本项目为 clash、sing-box、v2ray、xray 的透明代理 Magisk 模块。
 
+
 ## 免责声明
 
 本项目不对以下情况负责：设备变砖、SD 卡损坏或 SoC 烧毁。
@@ -10,21 +11,24 @@
 
 如果你真的不知道如何配置这个模块，你可能需要像 ClashForAndroid、v2rayNG、SagerNet（或 AnXray）等应用程序。
 
+
 ## 安装
 
 从 [Release](https://github.com/CHIZI-0618/box4magisk/releases) 下载模块压缩包，然后通过 [Magisk](https://github.com/topjohnwu/Magisk) 安装。
 
 ### 注意
 
-模块不包含 [clash](https://github.com/MetaCubeX/Clash.Meta)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core) 等二进制文件。
+模块不包含 [clash](https://github.com/Dreamacro/clash)、[clash.meta](https://github.com/MetaCubeX/Clash.Meta)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core) 等二进制文件。
   
 模块安装完成后请下载对应架构的核心文件放置到 `/data/adb/box/bin/` 目录。
 
+
 ## 配置
 
-- 各核心工作在 `/data/adb/box/核心名字` 目录，核心名字由 `/data/adb/box/scripts/box.config` 文件中 `bin_name` 定义，有效值只有 `clash`、`xray`、`v2ray`、`sing-box`，`bin_name` 决定启用的核心
+- 各核心工作在 `/data/adb/box/核心名字` 目录，核心名字由 `/data/adb/box/scripts/box.config` 文件中 `bin_name` 定义，有效值只有 `clash`、`xray`、`v2ray`、`sing-box`，`bin_name` **决定模块启用的核心**
 - 各核心配置文件需用户自定义，脚本会检查配置合法性, 检查结果存储在 `/data/adb/box/run/check.log` 文件中
 - 提示：`clash` 和 `sing-box` 自带默认配置已做好配合透明代理脚本工作的准备。建议只编辑 `proxy provider` 或 `outbounds` 部分来添加您的代理服务器，进阶配置请参考相应官方文档。地址：[clash 文档](https://github.com/Dreamacro/clash/wiki/configuration)，[sing-box 文档](https://sing-box.sagernet.org/)，[v2ray 文档](https://www.v2fly.org/)，[xray 文档](https://xtls.github.io/)
+
 
 ## 使用方法
 
@@ -35,7 +39,7 @@
 **以下核心服务统称 Box**
 
 - Box 服务默认会在系统启动后自动运行。
-- 您可以通过 Magisk 管理应用打开或关闭模块实时启动或停止 Box 服务，不需要重启您的设备。启动服务可能需要等待几秒钟，停止服务可能会立即生效。
+- 您可以通过 Magisk 管理应用打开或关闭模块**实时**启动或停止 Box 服务，**不需要重启您的设备**。启动服务可能需要等待几秒钟，停止服务可能会立即生效。
 
 #### 选择需要代理的应用程序（APP）
 
@@ -47,14 +51,13 @@
 
 - `mode` 的值为 `core` 时，透明代理不会工作，仅仅启动相应内核，这可以用来支持部分内核原生的 tun 入站。
 
-
 ### 高级用法
 
 #### 进入手动模式
 
-如果您希望完全通过运行命令来控制 Box，只需新建一个文件 `/data/adb/box/manual`。在这种情况下，Box 服务不会在启动时自动启动，您也不能通过 Magisk 管理器应用管理服务的启动或停止。
+如果您希望完全通过运行命令来控制 Box，只需新建一个文件 `/data/adb/box/manual`。在这种情况下，Box 服务不会在您的设备启动时**自动启动**，您也不能通过 Magisk 管理器应用管理服务的启动或停止。
 
-#### 管理服务的启停
+##### 管理服务的启停
 
 - Box service 脚本是 `/data/adb/box/scripts/box.service`.
 
@@ -67,8 +70,10 @@
   - 停止服务 :
 
     `/data/adb/box/scripts/box.service stop`
+    
+    终端执行时回显日志，且同步输出至日志文件中
 
-#### 管理透明代理是否启用
+##### 管理透明代理是否启用
 
 - 透明代理脚本是 `/data/adb/box/scripts/box.tproxy`.
 
@@ -81,6 +86,8 @@
   - 停用透明代理：
 
     `/data/adb/box/scripts/box.tproxy disable`
+    
+    终端执行时回显日志，且同步输出至日志文件中
 
 #### 连接到 WLAN 或开热点时绕过透明代理
 
@@ -89,6 +96,17 @@
 - 打开 `/data/adb/box/scripts/box.config` 文件，修改 `ignore_out_list` 数组添加 `wlan+` 元素则透明代理绕过 WLAN，热点不受影响
 
 - 打开 `/data/adb/box/scripts/box.config` 文件，修改 `ap_list` 数组删除 `wlan+` 元素则不透明代理 WLAN 与热点(联发科机型可能为 `ap+` 而非 `wlan+`)
+
+
+## 其他说明
+
+- 修改各核心配置文件时请保证 `tprxoy` 相关的配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致。
+  
+  Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L11-L15)。
+
+- 如本机存在公网地址请将地址添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中，防止流量环路。
+
+- Box 服务的日志在 `/data/adb/box/run` 目录
 
 
 ## 卸载
