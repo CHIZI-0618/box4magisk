@@ -21,8 +21,6 @@ start_redirect() {
   ${iptables} -t nat -N BOX_LOCAL
   ${iptables} -t nat -F BOX_LOCAL
 
-  ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner 0 --gid-owner 3005 -j RETURN
-
   if [ "${bin_name}" == "clash" ] ; then
     ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
     ${iptables} -t nat -A BOX_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
@@ -44,13 +42,39 @@ start_redirect() {
     ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i ${ap} -j REDIRECT --to-ports ${redir_port}
   done
 
+  ${iptables} -t nat -I PREROUTING -j BOX_EXTERNAL
+
+
+  ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner 0 --gid-owner 3005 -j RETURN
+
   for ignore in ${ignore_out_list[@]} ; do
     ${iptables} -t nat -I BOX_LOCAL -o ${ignore} -j RETURN
   done
 
-  ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
+  if [ "${proxy_mode}" = "blacklist" ] ; then
+    if [ "${uid_list}" = "" ] ; then
+      # Route Everything
+      ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
+      log "[Info]: transparent proxy for all apps."
+    else
+      # Bypass apps
+      for appid in ${uid_list[@]} ; do
+        ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner ${appid} -j RETURN
+      done
+      # Allow !app
+      ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
+      log "[Info]: proxy mode: ${proxy_mode} ${packages_list[@]} has no transparent proxy."
+    fi
+  elif [ "${proxy_mode}" = "whitelist" ] ; then
+    # Route apps to Box
+    for appid in ${appid_list[@]} ; do
+      ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j REDIRECT --to-ports ${redir_port}
+    done
+    ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
+    ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}
+    log "proxy mode: ${proxy_mode} ${packages_list[@]} transparent proxy."
+  fi
 
-  ${iptables} -t nat -I PREROUTING -j BOX_EXTERNAL
   ${iptables} -t nat -I OUTPUT -j BOX_LOCAL
 
   ${iptables} -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${redir_port} -j REJECT
@@ -140,8 +164,6 @@ start_tproxy() {
   # Disable kernel
   # ${iptables} -t mangle -A BOX_LOCAL -m owner ! --uid 0-99999999 -j DROP
 
-  find_packages_uid
-
   if [ "${proxy_mode}" = "blacklist" ] ; then
     if [ "${uid_list}" = "" ] ; then
       # Route Everything
@@ -159,7 +181,7 @@ start_tproxy() {
       log "[Info]: proxy mode: ${proxy_mode} ${packages_list[@]} has no transparent proxy."
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
-    # Route apps to Xray
+    # Route apps to Box
     for appid in ${appid_list[@]} ; do
       ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
       ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
@@ -271,6 +293,7 @@ if [ "${proxy_mode}" != "core" ] ; then
       stop_redirect >> /dev/null 2>&1
       sleep 1
       disable_ipv6
+      find_packages_uid
       if [ "${network_mode}" = "UDP" ] ; then
         log "[Info]: use TPROXY:TCP+UDP."
         log "[Info]: creating iptables transparent proxy rules."
@@ -295,6 +318,7 @@ if [ "${proxy_mode}" != "core" ] ; then
       log "[Warning]: clean up iptables transparent proxy rules done."
       sleep 3
       disable_ipv6
+      find_packages_uid
       if [ "${network_mode}" = "UDP" ] ; then
         log "[Info]: use TPROXY:TCP+UDP."
         log "[Info]: creating iptables transparent proxy rules."
