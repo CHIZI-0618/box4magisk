@@ -38,10 +38,17 @@ start_redirect() {
     ${iptables} -t nat -A BOX_LOCAL -d ${subnet} -j RETURN
   done
 
-  ${iptables} -t nat -A BOX_EXTERNAL -p tcp -j REDIRECT --to-ports ${redir_port}
+  ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i lo -j REDIRECT --to-ports ${redir_port}
+
+  for ap in ${ap_list[@]} ; do
+    ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i ${ap} -j REDIRECT --to-ports ${redir_port}
+  done
+
+  for ignore in ${ignore_out_list[@]} ; do
+    ${iptables} -t nat -I BOX_LOCAL -o ${ignore} -j RETURN
+  done
 
   ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
-
 
   ${iptables} -t nat -I PREROUTING -j BOX_EXTERNAL
   ${iptables} -t nat -I OUTPUT -j BOX_LOCAL
