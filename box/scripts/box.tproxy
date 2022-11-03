@@ -21,11 +21,6 @@ start_redirect() {
   ${iptables} -t nat -N BOX_LOCAL
   ${iptables} -t nat -F BOX_LOCAL
 
-  for subnet in ${intranet[@]} ; do
-    ${iptables} -t nat -A BOX_EXTERNAL -d ${subnet} -j RETURN
-    ${iptables} -t nat -A BOX_LOCAL -d ${subnet} -j RETURN
-  done
-
   ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner 0 --gid-owner 3005 -j RETURN
 
   if [ "${bin_name}" == "clash" ] ; then
@@ -37,6 +32,11 @@ start_redirect() {
     ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${redir_port}
     ${iptables} -t nat -A BOX_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${redir_port}
   fi
+
+  for subnet in ${intranet[@]} ; do
+    ${iptables} -t nat -A BOX_EXTERNAL -d ${subnet} -j RETURN
+    ${iptables} -t nat -A BOX_LOCAL -d ${subnet} -j RETURN
+  done
 
   ${iptables} -t nat -A BOX_EXTERNAL -p tcp -j REDIRECT --to-ports ${redir_port}
 
