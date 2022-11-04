@@ -1,4 +1,5 @@
 mixed-port: 7890
+redir-port: 7891
 tproxy-port: 1536
 allow-lan: true
 mode: rule
