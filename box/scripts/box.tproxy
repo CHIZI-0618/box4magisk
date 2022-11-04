@@ -295,9 +295,16 @@ if [ "${proxy_mode}" != "core" ] ; then
       disable_ipv6
       find_packages_uid
       if [ "${network_mode}" = "UDP" ] ; then
-        log "[Info]: use TPROXY:TCP+UDP."
-        log "[Info]: creating iptables transparent proxy rules."
-        start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+        if (zcat /proc/config.gz | grep -q TPROXY) ; then
+          log "[Info]: use TPROXY:TCP+UDP."
+          log "[Info]: creating iptables transparent proxy rules."
+          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+        else
+          log "[Warning]: the device does not support TPROXY, please switch network_mode."
+          log "[Info]: use REDIRECT:TCP."
+          log "[Info]: creating iptables transparent proxy rules."
+          start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        fi
       else
         [ "${network_mode}" = "TCP" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
         log "[Info]: creating iptables transparent proxy rules."
@@ -320,9 +327,16 @@ if [ "${proxy_mode}" != "core" ] ; then
       disable_ipv6
       find_packages_uid
       if [ "${network_mode}" = "UDP" ] ; then
-        log "[Info]: use TPROXY:TCP+UDP."
-        log "[Info]: creating iptables transparent proxy rules."
-        start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+        if (zcat /proc/config.gz | grep -q TPROXY) ; then
+          log "[Info]: use TPROXY:TCP+UDP."
+          log "[Info]: creating iptables transparent proxy rules."
+          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+        else
+          log "[Warning]: the device does not support TPROXY, please switch network_mode."
+          log "[Info]: use REDIRECT:TCP."
+          log "[Info]: creating iptables transparent proxy rules."
+          start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        fi
       else
         [ "${network_mode}" = "TCP" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
         log "[Info]: creating iptables transparent proxy rules."
