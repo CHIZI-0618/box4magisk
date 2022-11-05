@@ -25,6 +25,15 @@ probe_bin_alive() {
   [ -f ${cmd_file} ] && grep -q ${bin_path} ${cmd_file} && return 0 || return 1
 }
 
+forward() {
+  ${iptables} $1 FORWARD -o ${tun_device} -j ACCEPT
+  ${iptables} $1 FORWARD -i ${tun_device} -j ACCEPT
+}
+
+probe_tun_device() {
+  ifconfig | grep -q ${tun_device} || return 1
+}
+
 start_bin() {
   ulimit -SHn 1000000
   if [ "${bin_name}" == "sing-box" ] ; then
@@ -144,14 +153,18 @@ stop_service() {
 case "$1" in
   start)
     start_service
+    probe_tun_device && forward -I
     ;;
   stop)
+    forward -D >> /dev/null 2>&1
     stop_service
     ;;
   restart)
+    forward -D >> /dev/null 2>&1
     stop_service
     sleep 2
     start_service
+    probe_tun_device && forward -I
     ;;
   status)
     display_bin_pid
