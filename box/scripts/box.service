@@ -36,50 +36,56 @@ probe_tun_device() {
 
 start_bin() {
   ulimit -SHn 1000000
-  if [ "${bin_name}" == "sing-box" ] ; then
-    ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 
-    if [ "$?" = "0" ] ; then
+  case "${bin_name}" in
+  sing-box)
+    if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
       nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
+      return 0
     else
       log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
-      return 2
+      return 1
     fi
-  elif [ "${bin_name}" == "clash" ] ; then
-    ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1
-    if [ "$?" = "0" ] ; then
+    ;;
+  clash)
+    if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
       nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
+      return 0
     else
       log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
-      return 2
+      return 1
     fi
-  elif [ "${bin_name}" == "xray" ] ; then
-    ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1
-    if [ "$?" = "0" ] ; then
+    ;;
+  xray)
+    if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
       nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
+      return 0
     else
       log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
-      return 2
+      return 1
     fi
-  elif [ "${bin_name}" == "v2ray" ] ; then
-    ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1
-    if [ "$?" = "0" ] ; then
+    ;;
+  v2ray)
+    if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
       nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
+      return 0
     else
       log "[Error]: configuration check failed, please check the ${run_path}/check.log file."
-      return 2
+      return 1
     fi
-  else
+    ;;
+  *)
     log "[Error]: core error."
-    return 3
-  fi
+    return 2
+    ;;
+esac
 }
 
 display_bin_pid() {
@@ -120,8 +126,7 @@ start_service() {
     chmod 0700 ${bin_path}
     # setcap has been deprecated as it does not support binary outside of the /system/bin directory
     # setcap 'cap_net_admin,cap_net_raw+ep' ${bin_path}
-    start_bin
-    if wait_bin_listen ; then
+    if start_bin && wait_bin_listen ; then
       log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
       probe_tun_device && forward -I
       return 0
@@ -132,13 +137,13 @@ start_service() {
         return 0
       else
         log "[Error]: start ${bin_name} service failed, please check the ${run_path}/error_${bin_name}.log file."
-        rm -f ${pid_file}
-        return 4
+        rm -f ${pid_file} >> /dev/null 2>&1
+        return 1
       fi
     fi
   else
     log "[Error]: missing ${bin_name} core, please download and place it in the ${box_path}/bin/ directory"
-    return 1
+    return 2
   fi
 }
 
