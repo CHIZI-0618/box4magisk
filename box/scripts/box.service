@@ -123,10 +123,12 @@ start_service() {
     start_bin
     if wait_bin_listen ; then
       log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
+      probe_tun_device && forward -I
       return 0
     else
       if probe_bin_alive ; then
         log "[Warning]: ${bin_name} service is running but may not listening. ( PID: $(cat ${pid_file}) )"
+        probe_tun_device && forward -I
         return 0
       else
         log "[Error]: start ${bin_name} service failed, please check the ${run_path}/error_${bin_name}.log file."
@@ -144,6 +146,7 @@ stop_service() {
   if display_bin_pid ; then
     log "[Info]: stopping ${bin_name} service."
     kill $(cat ${pid_file}) || killall ${bin_name}
+    forward -D >> /dev/null 2>&1
     sleep 1
     display_bin_pid
   fi
@@ -153,18 +156,14 @@ stop_service() {
 case "$1" in
   start)
     start_service
-    probe_tun_device && forward -I
     ;;
   stop)
-    forward -D >> /dev/null 2>&1
     stop_service
     ;;
   restart)
-    forward -D >> /dev/null 2>&1
     stop_service
     sleep 2
     start_service
-    probe_tun_device && forward -I
     ;;
   status)
     display_bin_pid
