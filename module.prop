@@ -4,3 +4,4 @@ version=v3.3
 versionCode=2022110819
 author=CHIZI-0618
 description=Use sing-box, clash, v2ray, xray tunnel proxy on Android devices.
+updateJson=https://raw.githubusercontent.com/CHIZI-0618/box4magisk/main/box4magisk.json
