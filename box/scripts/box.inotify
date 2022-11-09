@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/system/bin/sh
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
