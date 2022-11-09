@@ -35,6 +35,11 @@ forward() {
   ${iptables} $1 FORWARD -i ${tun_device} -j ACCEPT
 }
 
+create_tun_link() {
+  mkdir -p /dev/net
+  [ ! -L /dev/net/tun ] && ln -s /dev/tun /dev/net/tun
+}
+
 probe_tun_device() {
   ifconfig | grep -q ${tun_device} || return 1
 }
@@ -129,6 +134,7 @@ start_service() {
   if [ -f ${bin_path} ] ; then
     chown 0:3005 ${bin_path}
     chmod 0700 ${bin_path}
+    create_tun_link
     # setcap has been deprecated as it does not support binary outside of the /system/bin directory
     # setcap 'cap_net_admin,cap_net_raw+ep' ${bin_path}
     if start_bin && wait_bin_listen ; then
