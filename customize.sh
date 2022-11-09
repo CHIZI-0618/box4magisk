@@ -11,23 +11,27 @@ if [ ! -d /data/adb/service.d ] ; then
   mkdir -p /data/adb/service.d
 fi
 
-unzip -o "${ZIPFILE}" -x 'META-INF/*' -d $TMPDIR
+unzip -qo "${ZIPFILE}" -x 'META-INF/*' -d $MODPATH
 
 if [ -d /data/adb/box ] ; then
-  cat /data/adb/box/scripts/box.config >> $TMPDIR/box/scripts/box.config
-  ui_print "User configuration box.config has been attached to the module box.config,"
-  ui_print "please re-edit box.config after the update is complete."
+  cat /data/adb/box/scripts/box.config >> $MODPATH/box/scripts/box.config
+  ui_print "- User configuration box.config has been"
+  ui_print "- attached to the module box.config,"
+  ui_print "- please re-edit box.config"
+  ui_print "- after the update is complete."
 
-  mv -f $TMPDIR/box/scripts/* /data/adb/box/scripts/
+  mv -f $MODPATH/box/scripts/* /data/adb/box/scripts/
 
-  mv $TMPDIR/README.md $TMPDIR/module.prop $TMPDIR/uninstall.sh $MODPATH/
+  rm -rf $MODPATH/box
 
   mkdir -p /data/adb/box/bin/
 else
-  mv $TMPDIR/box /data/adb/
+  mv $MODPATH/box /data/adb/
 fi
 
-mv -f $TMPDIR/box4magisk_service.sh /data/adb/service.d/
+mv -f $MODPATH/box4magisk_service.sh /data/adb/service.d/
+
+rm -f customize.sh
 
 set_perm_recursive $MODPATH 0 0 0755 0644
 set_perm_recursive /data/adb/box/ 0 3005 0755 0644
