@@ -5,6 +5,11 @@ scripts_dir=$(dirname ${scripts})
 
 source ${scripts_dir}/box.config
 
+log() {
+  export TZ=Asia/Shanghai
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a ${run_path}/run.log
+}
+
 uid_list=()
 
 find_packages_uid() {
