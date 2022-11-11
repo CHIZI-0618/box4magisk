@@ -31,8 +31,10 @@ probe_bin_alive() {
 }
 
 forward() {
-  ${iptables} $1 FORWARD -o ${tun_device} -j ACCEPT
-  ${iptables} $1 FORWARD -i ${tun_device} -j ACCEPT
+  iptables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
+  iptables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
+  ip6tables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
+  ip6tables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
 }
 
 create_tun_link() {

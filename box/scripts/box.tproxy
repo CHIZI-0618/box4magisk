@@ -100,9 +100,13 @@ stop_redirect() {
 }
 
 start_tproxy() {
-  ip rule add fwmark ${id} lookup ${id}
-  ip route add local default dev lo table ${id}
-
+  if [ "${iptables}" = "ip6tables -w 100" ] ; then
+    ip -6 rule add fwmark ${id} table ${id}
+    ip -6 route add local default dev lo table ${id}
+  else
+    ip rule add fwmark ${id} table ${id}
+    ip route add local default dev lo table ${id}
+  fi
 
   ${iptables} -t mangle -N BOX_EXTERNAL
   ${iptables} -t mangle -F BOX_EXTERNAL
@@ -117,15 +121,32 @@ start_tproxy() {
   ${iptables} -t mangle -I BOX_EXTERNAL -i ccmni+ -j RETURN
 
   # Bypass intranet
-  if [ "${bin_name}" == "clash" ] ; then
-    for subnet in ${intranet[@]} ; do
-      ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} -j RETURN
-    done
+  # ${iptables} -t mangle -A BOX_EXTERNAL -m addrtype --dst-type LOCAL -j RETURN
+  # Run `su -c 'zcat /proc/config.gz | grep -i addrtype'` to check compatibility
+  if [ "${bin_name}" = "clash" ] ; then
+    if [ "${iptables}" = "ip6tables -w 100" ] ; then
+      ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
+      for subnet6 in ${intranet6[@]}; do
+        ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet6} -j RETURN
+      done
+    else
+      ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
+      for subnet in ${intranet[@]} ; do
+        ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} -j RETURN
+      done
+    fi
   else
-    for subnet in ${intranet[@]} ; do
-      ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} -p udp ! --dport 53 -j RETURN
-      ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} ! -p udp -j RETURN
-    done
+    if [ "${iptables}" = "ip6tables -w 100" ] ; then
+      for subnet6 in ${intranet6[@]} ; do
+        ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet6} -p udp ! --dport 53 -j RETURN
+        ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet6} ! -p udp -j RETURN
+      done
+    else
+      for subnet in ${intranet[@]} ; do
+        ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} -p udp ! --dport 53 -j RETURN
+        ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} ! -p udp -j RETURN
+      done
+    fi
   fi
 
   ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -i lo -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${id}
@@ -151,15 +172,29 @@ start_tproxy() {
   done
 
   # Bypass intranet
-  if [ "${bin_name}" == "clash" ] ; then
-    for subnet in ${intranet[@]} ; do
-      ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -j RETURN
-    done
+  # ${iptables} -t mangle -A BOX_LOCAL -m addrtype --dst-type LOCAL -j RETURN
+  if [ "${bin_name}" = "clash" ] ; then
+    if [ "${iptables}" = "ip6tables -w 100" ] ; then
+      for subnet6 in ${intranet6[@]} ; do
+        ${iptables} -t mangle -A BOX_LOCAL -d ${subnet6} -j RETURN
+      done
+    else
+      for subnet in ${intranet[@]} ; do
+        ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -j RETURN
+      done
+    fi
   else
-    for subnet in ${intranet[@]} ; do
-      ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -p udp ! --dport 53 -j RETURN
-      ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} ! -p udp -j RETURN
-    done
+    if [ "${iptables}" = "ip6tables -w 100" ] ; then
+      for subnet6 in ${intranet6[@]} ; do
+        ${iptables} -t mangle -A BOX_LOCAL -d ${subnet6} -p udp ! --dport 53 -j RETURN
+        ${iptables} -t mangle -A BOX_LOCAL -d ${subnet6} ! -p udp -j RETURN
+      done
+    else
+      for subnet in ${intranet[@]} ; do
+        ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -p udp ! --dport 53 -j RETURN
+        ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} ! -p udp -j RETURN
+      done
+    fi
   fi
 
   # Bypass box itself
@@ -212,10 +247,15 @@ start_tproxy() {
 
 
   # This rule blocks local access to tproxy-port to prevent traffic loopback.
-  ${iptables} -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
+  if [ "${iptables}" = "ip6tables -w 100" ] ; then
+    ${iptables} -A OUTPUT -d ::1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
+  else
+    ${iptables} -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
+  fi
 
 
-  if [ "${bin_name}" == "clash" ] ; then
+  if [ "${bin_name}" = "clash" ] && [ "${iptables}" = "iptables -w 100" ] ; then
+    # android ip6tablses no nat table
     ${iptables} -t nat -N CLASH_DNS_EXTERNAL
     ${iptables} -t nat -F CLASH_DNS_EXTERNAL
 
@@ -241,8 +281,13 @@ start_tproxy() {
 }
 
 stop_tproxy() {
-  ip rule del fwmark ${id} table ${id}
-  ip route del local default dev lo table ${id}
+  if [ "${iptables}" = "ip6tables -w 100" ] ; then
+    ip -6 rule del fwmark ${id} table ${id}
+    ip -6 route flush table ${id}
+  else
+    ip rule del fwmark ${id} table ${id}
+    ip route flush table ${id}
+  fi
 
   ${iptables} -t mangle -D PREROUTING -j BOX_EXTERNAL
     
@@ -259,9 +304,15 @@ stop_tproxy() {
   ${iptables} -t mangle -F DIVERT
   ${iptables} -t mangle -X DIVERT
 
-  ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
+  if [ "${iptables}" = "ip6tables -w 100" ] ; then
+    ${iptables} -D OUTPUT -d ::1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
+  else
+    ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
+  fi
 
 
+  # android ip6tablses no nat table
+  iptables="iptables -w 100"
   ${iptables} -t nat -D PREROUTING -j CLASH_DNS_EXTERNAL
 
   ${iptables} -t nat -D OUTPUT -j CLASH_DNS_LOCAL
@@ -295,58 +346,88 @@ enable_ipv6() {
 if [ "${proxy_mode}" != "core" ] ; then
   case "$1" in
     enable)
-      stop_tproxy >> /dev/null 2>&1
-      stop_redirect >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
       sleep 1
-      disable_ipv6
       find_packages_uid
       if [ "${proxy_method}" = "TPROXY" ] ; then
         if (zcat /proc/config.gz | grep -q TPROXY) ; then
           log "[Info]: use TPROXY:TCP+UDP."
-          log "[Info]: creating iptables transparent proxy rules."
+          log "[Info]: creating ip(6)tables transparent proxy rules."
+          iptables="iptables -w 100"
           start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          if [ "${ipv6}" = "enable" ] ; then
+            log "[Info]: use IPv6."
+            enable_ipv6
+            iptables="ip6tables -w 100"
+            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          else
+            disable_ipv6
+            log "[Info]: disable IPv6."
+          fi
         else
           log "[Warning]: the device does not support TPROXY, please switch proxy_method."
           log "[Info]: use REDIRECT:TCP."
           log "[Info]: creating iptables transparent proxy rules."
+          iptables="iptables -w 100"
           start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+          [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
         fi
       else
         [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
         log "[Info]: creating iptables transparent proxy rules."
+        iptables="iptables -w 100"
         start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
       fi
       ;;
     disable)
-      log "[Warning]: cleaning up iptables transparent proxy rules."
-      stop_tproxy >> /dev/null 2>&1
-      stop_redirect >> /dev/null 2>&1
-      log "[Warning]: clean up iptables transparent proxy rules done."
+      log "[Warning]: cleaning up ip(6)tables transparent proxy rules."
+      iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
+      log "[Warning]: clean up ip(6)tables transparent proxy rules done."
       enable_ipv6
+      log "[Info]: enable IPv6."
       ;;
     renew)
-      log "[Warning]: cleaning up iptables transparent proxy rules."
-      stop_tproxy >> /dev/null 2>&1
-      stop_redirect >> /dev/null 2>&1
-      log "[Warning]: clean up iptables transparent proxy rules done."
+      log "[Warning]: cleaning up ip(6)tables transparent proxy rules."
+      iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
+      log "[Warning]: clean up ip(6)tables transparent proxy rules done."
       sleep 3
-      disable_ipv6
       find_packages_uid
       if [ "${proxy_method}" = "TPROXY" ] ; then
         if (zcat /proc/config.gz | grep -q TPROXY) ; then
           log "[Info]: use TPROXY:TCP+UDP."
           log "[Info]: creating iptables transparent proxy rules."
+          iptables="iptables -w 100"
           start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          if [ "${ipv6}" = "enable" ] ; then
+            log "[Info]: use IPv6."
+            enable_ipv6
+            iptables="ip6tables -w 100"
+            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          else
+            disable_ipv6
+            log "[Info]: disable IPv6."
+          fi
         else
           log "[Warning]: the device does not support TPROXY, please switch proxy_method."
           log "[Info]: use REDIRECT:TCP."
           log "[Info]: creating iptables transparent proxy rules."
+          iptables="iptables -w 100"
           start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+          [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
         fi
       else
         [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
         log "[Info]: creating iptables transparent proxy rules."
+        iptables="iptables -w 100"
         start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
       fi
       ;;
     *)
@@ -354,7 +435,8 @@ if [ "${proxy_mode}" != "core" ] ; then
       ;;
   esac
 else
-  stop_tproxy >> /dev/null 2>&1
-  stop_redirect >> /dev/null 2>&1
+  iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+  iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+  iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
   log "[Info]: proxy_mode: ${proxy_mode}, disable transparent proxy."
 fi
