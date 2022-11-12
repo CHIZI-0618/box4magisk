@@ -2,7 +2,6 @@
 
 本项目为 clash、sing-box、v2ray、xray 的 Magisk 模块。支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持 TUN（TCP + UDP），亦可 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
 
-
 ## 免责声明
 
 本项目不对以下情况负责：设备变砖、SD 卡损坏或 SoC 烧毁。
@@ -57,7 +56,7 @@
 
 - Box 默认使用 TPROXY 透明代理 TCP + UDP，若检测到设备不支持 TPROXY，则自动使用 REDIRECT 仅代理 TCP
 
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `network_mode` 的值为 `TCP` 或 `MIXED` 则使用 REDIRECT 代理 TCP，在 Box 内核（仅 sing-box、clash 支持 TUN）没有启用 TUN 时 UDP 不会被代理
+- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_method` 的值为 `REDIRECT` 或 `MIXED` 则使用 REDIRECT 代理 TCP，在 Box 内核（仅 sing-box、clash 支持 TUN）没有启用 TUN 时 UDP 不会被代理
 
 #### 连接到 WLAN 或开热点时绕过透明代理
 
@@ -119,3 +118,7 @@
 
 1. 从 Magisk 管理器应用卸载本模块，会删除 `/data/adb/service.d/box4magisk_service.sh`，保留 Box 数据目录 `/data/adb/box`。
 2. 使用命令清除 Box 数据：`rm -rf /data/adb/box`
+
+## 更新日志
+
+[CHANGELOG](changelog.md)
