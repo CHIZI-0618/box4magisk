@@ -26,7 +26,7 @@ start_redirect() {
   ${iptables} -t nat -N BOX_LOCAL
   ${iptables} -t nat -F BOX_LOCAL
 
-  if [ "${bin_name}" == "clash" ] ; then
+  if [ "${bin_name}" = "clash" ] ; then
     ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
     ${iptables} -t nat -A BOX_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
     ${iptables} -t nat -A BOX_EXTERNAL -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
@@ -175,10 +175,12 @@ start_tproxy() {
   # ${iptables} -t mangle -A BOX_LOCAL -m addrtype --dst-type LOCAL -j RETURN
   if [ "${bin_name}" = "clash" ] ; then
     if [ "${iptables}" = "ip6tables -w 100" ] ; then
+      ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j RETURN
       for subnet6 in ${intranet6[@]} ; do
         ${iptables} -t mangle -A BOX_LOCAL -d ${subnet6} -j RETURN
       done
     else
+      ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j RETURN
       for subnet in ${intranet[@]} ; do
         ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -j RETURN
       done
