@@ -1,6 +1,6 @@
 # Box4Magisk
 
-本项目为 clash、sing-box、v2ray、xray 的 Magisk 模块。支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持 TUN（TCP + UDP），亦可 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
+本项目为 clash、sing-box、v2ray、xray 的 [Magisk](https://github.com/topjohnwu/Magisk) 模块。支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持 TUN（TCP + UDP），亦可 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
 
 ## 免责声明
 
@@ -8,7 +8,7 @@
 
 **请确保您的配置文件不会造成流量回环，否则可能会导致您的手机无限重启。**
 
-如果你真的不知道如何配置这个模块，你可能需要像 ClashForAndroid、v2rayNG、SagerNet（或 AnXray）等应用程序。
+如果你真的不知道如何配置这个模块，你可能需要像 ClashForAndroid、v2rayNG、surfboard、SagerNet、AnXray 等应用程序。
 
 
 ## 安装
@@ -19,7 +19,7 @@
 
 模块不包含 [clash](https://github.com/Dreamacro/clash)、[clash.meta](https://github.com/MetaCubeX/Clash.Meta)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core) 等二进制文件。
   
-模块安装完成后请下载对应架构的核心文件放置到 `/data/adb/box/bin/` 目录。
+模块安装完成后请下载您设备对应架构的核心文件放置到 `/data/adb/box/bin/` 目录。
 
 
 ## 配置
@@ -38,15 +38,15 @@
 **以下核心服务统称 Box**
 
 - Box 服务默认会在系统启动后自动运行
-- 您可以通过 Magisk 管理应用打开或关闭模块**实时**启动或停止 Box 服务，**不需要重启您的设备**。启动服务可能需要等待几秒钟，停止服务可能会立即生效
+- 您可以通过 Magisk Manager 应用打开或关闭模块**实时**启动或停止 Box 服务，**不需要重启您的设备**。启动服务可能需要等待几秒钟，停止服务可能会立即生效
 
 #### 选择需要代理的应用程序（APP）
 
 - Box 默认代理所有安卓用户的所有应用程序（APP）
 
-- 如果您希望 box 代理所有应用程序（APP），除了某些特定的应用，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `blacklist`（默认值），在 `packages_list=()` 数组中添加元素，即括号内添加**不希望**代理的应用包名，各应用包名用空格隔开
+- 如果您希望 Box 代理所有应用程序（APP），除了某些特定的应用，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `blacklist`（默认值），在 `packages_list=()` 数组中添加元素，即括号内添加**不希望**代理的应用包名，各应用包名用空格隔开
 
-- 如果您希望对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `packages_list=()` 数组中添加元素，即括号内添加**希望**代理的应用包名，各应用包名用空格隔开
+- 如果您希望只对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `packages_list=()` 数组中添加元素，即括号内添加**希望**代理的应用包名，各应用包名用空格隔开
 
 - `proxy_mode` 的值为 `core` 时，透明代理不会工作，仅仅启动相应内核，这可以用来支持部分内核原生的 TUN 入站
 
@@ -72,9 +72,9 @@
 
 ##### 管理服务的启停
 
-- Box service 脚本是 `/data/adb/box/scripts/box.service`
+- Box 服务脚本是 `/data/adb/box/scripts/box.service`
 
-- 例如，在测试环境中（Magisk-alpha version: 23001）
+- 例如，在测试环境中（Magisk version: 25200）
 
   - 启动服务：
 
@@ -83,14 +83,23 @@
   - 停止服务：
 
     `/data/adb/box/scripts/box.service stop`
+
+  - 重启服务：
+
+    `/data/adb/box/scripts/box.service restart`
+ 
+  - 显示状态：
+
+    `/data/adb/box/scripts/box.service status`
     
+
     终端执行时回显日志，且同步输出至日志文件中
 
 ##### 管理透明代理是否启用
 
 - 透明代理脚本是 `/data/adb/box/scripts/box.tproxy`
 
-- 例如，在测试环境中（Magisk-alpha version: 23001）
+- 例如，在测试环境中（Magisk version: 25200）
 
   - 启用透明代理：
 
@@ -99,6 +108,10 @@
   - 停用透明代理：
 
     `/data/adb/box/scripts/box.tproxy disable`
+
+  - 重载透明代理：
+
+    `/data/adb/box/scripts/box.tproxy renew`
     
     终端执行时回显日志，且同步输出至日志文件中
 
@@ -107,7 +120,7 @@
 
 - 修改各核心配置文件时请保证 `tprxoy` 相关的配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致。
   
-  Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L11-L15)。
+  ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L11-L15)~~。
 
 - 如本机存在**公网 IP** 地址请将 IP 添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中，防止流量环路。
 
@@ -116,8 +129,8 @@
 
 ## 卸载
 
-1. 从 Magisk 管理器应用卸载本模块，会删除 `/data/adb/service.d/box4magisk_service.sh`，保留 Box 数据目录 `/data/adb/box`。
-2. 使用命令清除 Box 数据：`rm -rf /data/adb/box`
+- 从 Magisk Manager 应用卸载本模块，会删除 `/data/adb/service.d/box4magisk_service.sh`，保留 Box 数据目录 `/data/adb/box`。
+- 可使用命令清除 Box 数据：`rm -rf /data/adb/box`
 
 ## 更新日志
 
