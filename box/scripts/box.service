@@ -14,6 +14,8 @@ mkdir -p ${box_path}/${bin_name}
 
 # ${box_path}/bin/yq -o=json -i "(.inbounds[] | select(.type == \"tproxy\") | .listen_port) = ${tproxy_port}" ${box_path}/sing-box/config.json
 
+find ${box_path} -mtime +3 -type f -name "*.log" | xargs rm -f
+
 log() {
   export TZ=Asia/Shanghai
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a ${run_path}/run.log
