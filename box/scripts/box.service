@@ -29,7 +29,7 @@ find_netstat_path() {
 
 probe_bin_alive() {
   [ -f ${pid_file} ] && cmd_file="/proc/$(cat ${pid_file})/cmdline" || return 1
-  [ -f ${cmd_file} ] && grep -q ${bin_path} ${cmd_file} && return 0 || return 1
+  [ -f ${cmd_file} ] && grep -q ${bin_name} ${cmd_file} && return 0 || return 1
 }
 
 forward() {
@@ -54,7 +54,7 @@ start_bin() {
   sing-box)
     if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
       return 0
     else
@@ -65,7 +65,7 @@ start_bin() {
   clash)
     if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
+      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
       return 0
     else
@@ -76,7 +76,7 @@ start_bin() {
   xray)
     if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
       return 0
     else
@@ -87,7 +87,7 @@ start_bin() {
   v2ray)
     if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
       log "[Info]: starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid 0:3005 ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
       echo -n $! > ${pid_file}
       return 0
     else
@@ -99,12 +99,14 @@ start_bin() {
     log "[Error]: core error."
     return 2
     ;;
-esac
+  esac
 }
 
 display_bin_pid() {
   if probe_bin_alive ; then
-    log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
+    bin_pid=$(cat ${pid_file})
+    log "[Info]: ${bin_name} has started with the $(stat -c %U:%G /proc/${bin_pid}) user group."
+    log "[Info]: ${bin_name} service is running. ( PID: ${bin_pid} )"
     return 0
   else
     log "[Info]: ${bin_name} service is stopped."
@@ -128,19 +130,32 @@ wait_bin_listen() {
   fi
 }
 
+check_permission() {
+  if which ${bin_name} | grep -q "/system/bin/" ; then
+    bin_path=$(which ${bin_name})
+    chown ${box_user_group} ${bin_path}
+    chown -R ${box_user_group} ${box_path}
+    chmod 0700 ${bin_path}
+    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
+    setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} && log "[Info]: ${bin_name} will be started with the ${box_user_group} user group." || box_user_group="root:net_admin"
+  elif [ -f ${bin_path} ] ; then
+    box_user_group="root:net_admin"
+    chown ${box_user_group} ${bin_path}
+    chown -R ${box_user_group} ${box_path}
+    chmod 0700 ${bin_path}
+  else
+    return 1
+  fi
+}
+
 start_service() {
   if probe_bin_alive ; then
     log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
     return 0
   fi
 
-  # if [[ ${bin_name_list[@]} =~ ${bin_name} ]] && [ -f ${bin_path} ] ; then
-  if [ -f ${bin_path} ] ; then
-    chown 0:3005 ${bin_path}
-    chmod 0700 ${bin_path}
+  if check_permission ; then
     create_tun_link
-    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
-    # setcap 'cap_net_admin,cap_net_raw+ep' ${bin_path}
     if start_bin && wait_bin_listen ; then
       log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
       probe_tun_device && forward -I
