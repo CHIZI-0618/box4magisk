@@ -16,7 +16,7 @@ service_control() {
       if [ "${events}" = "d" ] ; then
         ${service_path} start && ${tproxy_path} enable
       elif [ "${events}" = "n" ] ; then
-        ${service_path} stop && ${tproxy_path} disable
+        ${tproxy_path} disable && ${service_path} stop
       fi
     fi
   fi

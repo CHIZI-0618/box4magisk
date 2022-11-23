@@ -20,12 +20,14 @@ find_packages_uid() {
   done
 }
 
-check_user_group() {
-  [ -f ${pid_file} ] && cmd_file="/proc/$(cat ${pid_file})/cmdline" || return 1
-  [ -f ${cmd_file} ] && grep -q ${bin_name} ${cmd_file} || return 1
-  bin_pid=$(cat ${pid_file})
-  box_user=$(stat -c %U /proc/${bin_pid})
-  box_group=$(stat -c %G /proc/${bin_pid})
+probe_user_group() {
+  if [ -f ${pid_file} ] && bin_pid=$(cat ${pid_file}) && grep -q ${bin_name} /proc/${bin_pid}/cmdline ; then
+    box_user=$(stat -c %U /proc/${bin_pid})
+    box_group=$(stat -c %G /proc/${bin_pid})
+  else
+    box_user=$(echo ${box_user_group} | awk -F ':' '{print $1}')
+    box_group=$(echo ${box_user_group} | awk -F ':' '{print $2}')
+  fi
 }
 
 start_redirect() {
@@ -100,6 +102,8 @@ stop_redirect() {
   ${iptables} -t nat -D OUTPUT -j BOX_LOCAL
 
   ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${redir_port} -j REJECT
+  ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${redir_port} -j REJECT
+
 
   ${iptables} -t nat -F BOX_EXTERNAL
   ${iptables} -t nat -X BOX_EXTERNAL
@@ -109,10 +113,10 @@ stop_redirect() {
 
 start_tproxy() {
   if [ "${iptables}" = "ip6tables -w 100" ] ; then
-    ip -6 rule add fwmark ${id} table ${id}
+    ip -6 rule add fwmark ${id} table ${id} pref ${id}
     ip -6 route add local default dev lo table ${id}
   else
-    ip rule add fwmark ${id} table ${id}
+    ip rule add fwmark ${id} table ${id} pref ${id}
     ip route add local default dev lo table ${id}
   fi
 
@@ -120,7 +124,7 @@ start_tproxy() {
   ${iptables} -t mangle -F BOX_EXTERNAL
 
   # Bypass box itself
-  # ${iptables} -t mangle -A BOX_EXTERNAL -j RETURN -m mark --mark ${routing_mark}
+  # ${iptables} -t mangle -A BOX_EXTERNAL -m mark --mark ${routing_mark} -j RETURN
 
   # Bypass other if
   # Notice: Some interface is named with r_ / oem / nm_ / qcom_
@@ -210,7 +214,7 @@ start_tproxy() {
   # Bypass box itself
   ${iptables} -t mangle -I BOX_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
 
-  # ${iptables} -t mangle -I BOX_LOCAL -j RETURN -m mark --mark ${routing_mark}
+  # ${iptables} -t mangle -I BOX_LOCAL -m mark --mark ${routing_mark} -j RETURN
 
   # Disable kernel
   # ${iptables} -t mangle -A BOX_LOCAL -m owner ! --uid 0-99999999 -j DROP
@@ -316,8 +320,10 @@ stop_tproxy() {
 
   if [ "${iptables}" = "ip6tables -w 100" ] ; then
     ${iptables} -D OUTPUT -d ::1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
+    ${iptables} -D OUTPUT -d ::1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
   else
     ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
+    ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
   fi
 
 
@@ -354,100 +360,98 @@ enable_ipv6() {
 }
 
 if [ "${proxy_mode}" != "core" ] ; then
-  if check_user_group ; then
-    case "$1" in
-      enable)
-        iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-        iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-        iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-        sleep 1
-        find_packages_uid
-        if [ "${proxy_method}" = "TPROXY" ] ; then
-          if (zcat /proc/config.gz | grep -q TPROXY) ; then
-            log "[Info]: use TPROXY:TCP+UDP."
-            log "[Info]: creating ip(6)tables transparent proxy rules."
-            iptables="iptables -w 100"
-            start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
-            if [ "${ipv6}" = "enable" ] ; then
-              log "[Info]: use IPv6."
-              enable_ipv6
-              iptables="ip6tables -w 100"
-              start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
-            else
-              disable_ipv6
-              log "[Info]: disable IPv6."
-            fi
+  probe_user_group
+  case "$1" in
+    enable)
+      iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
+      sleep 1
+      find_packages_uid
+      if [ "${proxy_method}" = "TPROXY" ] ; then
+        if (zcat /proc/config.gz | grep -q TPROXY) ; then
+          log "[Info]: use TPROXY:TCP+UDP."
+          log "[Info]: creating ip(6)tables transparent proxy rules."
+          iptables="iptables -w 100"
+          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          if [ "${ipv6}" = "enable" ] ; then
+            log "[Info]: use IPv6."
+            enable_ipv6
+            iptables="ip6tables -w 100"
+            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
           else
-            log "[Warning]: the device does not support TPROXY, please switch proxy_method."
-            log "[Info]: use REDIRECT:TCP."
-            log "[Info]: creating iptables transparent proxy rules."
-            iptables="iptables -w 100"
-            start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
-            [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
+            disable_ipv6
+            log "[Info]: disable IPv6."
           fi
         else
-          [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
+          log "[Warning]: the device does not support TPROXY, please switch proxy_method."
+          log "[Info]: use REDIRECT:TCP."
           log "[Info]: creating iptables transparent proxy rules."
           iptables="iptables -w 100"
           start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
           [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
         fi
-        ;;
-      disable)
-        log "[Warning]: cleaning up ip(6)tables transparent proxy rules."
-        iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-        iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-        iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-        log "[Warning]: clean up ip(6)tables transparent proxy rules done."
-        enable_ipv6
-        log "[Info]: enable IPv6."
-        ;;
-      renew)
-        log "[Warning]: cleaning up ip(6)tables transparent proxy rules."
-        iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-        iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-        iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-        log "[Warning]: clean up ip(6)tables transparent proxy rules done."
-        sleep 3
-        find_packages_uid
-        if [ "${proxy_method}" = "TPROXY" ] ; then
-          if (zcat /proc/config.gz | grep -q TPROXY) ; then
-            log "[Info]: use TPROXY:TCP+UDP."
-            log "[Info]: creating iptables transparent proxy rules."
-            iptables="iptables -w 100"
-            start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
-            if [ "${ipv6}" = "enable" ] ; then
-              log "[Info]: use IPv6."
-              enable_ipv6
-              iptables="ip6tables -w 100"
-              start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
-            else
-              disable_ipv6
-              log "[Info]: disable IPv6."
-            fi
+      else
+        [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
+        log "[Info]: creating iptables transparent proxy rules."
+        iptables="iptables -w 100"
+        start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
+      fi
+      ;;
+    disable)
+      log "[Warning]: cleaning up ip(6)tables transparent proxy rules."
+      iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
+      log "[Warning]: clean up ip(6)tables transparent proxy rules done."
+      enable_ipv6
+      log "[Info]: enable IPv6."
+      return 0
+      ;;
+    renew)
+      log "[Warning]: cleaning up ip(6)tables transparent proxy rules."
+      iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
+      iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
+      log "[Warning]: clean up ip(6)tables transparent proxy rules done."
+      sleep 3
+      find_packages_uid
+      if [ "${proxy_method}" = "TPROXY" ] ; then
+        if (zcat /proc/config.gz | grep -q TPROXY) ; then
+          log "[Info]: use TPROXY:TCP+UDP."
+          log "[Info]: creating iptables transparent proxy rules."
+          iptables="iptables -w 100"
+          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          if [ "${ipv6}" = "enable" ] ; then
+            log "[Info]: use IPv6."
+            enable_ipv6
+            iptables="ip6tables -w 100"
+            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
           else
-            log "[Warning]: the device does not support TPROXY, please switch proxy_method."
-            log "[Info]: use REDIRECT:TCP."
-            log "[Info]: creating iptables transparent proxy rules."
-            iptables="iptables -w 100"
-            start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
-            [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
+            disable_ipv6
+            log "[Info]: disable IPv6."
           fi
         else
-          [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
+          log "[Warning]: the device does not support TPROXY, please switch proxy_method."
+          log "[Info]: use REDIRECT:TCP."
           log "[Info]: creating iptables transparent proxy rules."
           iptables="iptables -w 100"
           start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
           [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
         fi
-        ;;
-      *)
-        echo "$0:  usage:  $0 {enable|disable|renew}"
-        ;;
-    esac
-  else
-    log "[Error]: failed to check Box user group, please make sure Box core is started."
-  fi
+      else
+        [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
+        log "[Info]: creating iptables transparent proxy rules."
+        iptables="iptables -w 100"
+        start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
+      fi
+      ;;
+    *)
+      echo "$0:  usage:  $0 {enable|disable|renew}"
+      ;;
+  esac
 else
   iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
   iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
