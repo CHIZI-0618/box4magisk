@@ -14,13 +14,17 @@ fi
 unzip -qo "${ZIPFILE}" -x 'META-INF/*' -d $MODPATH
 
 if [ -d /data/adb/box ] ; then
+  cp /data/adb/box/scripts/box.config /data/adb/box/scripts/box.config.bak
+  ui_print "- User configuration box.config has been backed up to box.config.bak"
+
   cat /data/adb/box/scripts/box.config >> $MODPATH/box/scripts/box.config
+  cp -f $MODPATH/box/scripts/* /data/adb/box/scripts/
   ui_print "- User configuration box.config has been"
   ui_print "- attached to the module box.config,"
   ui_print "- please re-edit box.config"
   ui_print "- after the update is complete."
 
-  mv -f $MODPATH/box/scripts/* /data/adb/box/scripts/
+  awk '!x[$0]++' $MODPATH/box/scripts/box.config > /data/adb/box/scripts/box.config
 
   rm -rf $MODPATH/box
 
