@@ -79,7 +79,7 @@ start_redirect() {
       done
       # Allow !app
       ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
-      log "[Info]: proxy mode: ${proxy_mode} ${packages_list[@]} has no transparent proxy."
+      log "[Info]: proxy mode: ${proxy_mode}, ${user_packages_list[@]} no transparent proxy."
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
     # Route apps to Box
@@ -88,7 +88,12 @@ start_redirect() {
     done
     ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
     ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}
-    log "proxy mode: ${proxy_mode} ${packages_list[@]} transparent proxy."
+    log "[Info]: proxy mode: ${proxy_mode}, ${user_packages_list[@]} transparent proxy."
+  else
+    log "[Warning]: proxy mode: ${proxy_mode} error."
+    # Route Everything
+    ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
+    log "[Info]: transparent proxy for all apps."
   fi
 
   ${iptables} -t nat -I OUTPUT -j BOX_LOCAL
@@ -233,7 +238,7 @@ start_tproxy() {
       # Allow !app
       ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark ${id}
       ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
-      log "[Info]: proxy mode: ${proxy_mode} ${packages_list[@]} has no transparent proxy."
+      log "[Info]: proxy mode: ${proxy_mode}, ${user_packages_list[@]} no transparent proxy."
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
     # Route apps to Box
@@ -245,7 +250,13 @@ start_tproxy() {
     ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 0 -j MARK --set-mark ${id}
     ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
     ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
-    log "proxy mode: ${proxy_mode} ${packages_list[@]} transparent proxy."
+    log "[Info]: proxy mode: ${proxy_mode}, ${user_packages_list[@]} transparent proxy."
+  else
+    log "[Warning]: proxy mode: ${proxy_mode} error."
+    # Route Everything
+    ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark ${id}
+    ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
+    log "[Info]: transparent proxy for all apps."
   fi
 
   ${iptables} -t mangle -I OUTPUT -j BOX_LOCAL
@@ -373,12 +384,12 @@ if [ "${proxy_mode}" != "core" ] ; then
           log "[Info]: use TPROXY:TCP+UDP."
           log "[Info]: creating ip(6)tables transparent proxy rules."
           iptables="iptables -w 100"
-          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
           if [ "${ipv6}" = "enable" ] ; then
             log "[Info]: use IPv6."
             enable_ipv6
             iptables="ip6tables -w 100"
-            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
           else
             disable_ipv6
             log "[Info]: disable IPv6."
@@ -388,14 +399,14 @@ if [ "${proxy_mode}" != "core" ] ; then
           log "[Info]: use REDIRECT:TCP."
           log "[Info]: creating iptables transparent proxy rules."
           iptables="iptables -w 100"
-          start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+          start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
           [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
         fi
       else
         [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
         log "[Info]: creating iptables transparent proxy rules."
         iptables="iptables -w 100"
-        start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
         [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
       fi
       ;;
@@ -422,12 +433,12 @@ if [ "${proxy_mode}" != "core" ] ; then
           log "[Info]: use TPROXY:TCP+UDP."
           log "[Info]: creating iptables transparent proxy rules."
           iptables="iptables -w 100"
-          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+          start_tproxy && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
           if [ "${ipv6}" = "enable" ] ; then
             log "[Info]: use IPv6."
             enable_ipv6
             iptables="ip6tables -w 100"
-            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rule failed." && stop_tproxy >> /dev/null 2>&1)
+            start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
           else
             disable_ipv6
             log "[Info]: disable IPv6."
@@ -437,14 +448,14 @@ if [ "${proxy_mode}" != "core" ] ; then
           log "[Info]: use REDIRECT:TCP."
           log "[Info]: creating iptables transparent proxy rules."
           iptables="iptables -w 100"
-          start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+          start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
           [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
         fi
       else
         [ "${proxy_method}" = "REDIRECT" ] && log "[Info]: use REDIRECT:TCP." || log "[Info]: use MIXED:TCP+TUN."
         log "[Info]: creating iptables transparent proxy rules."
         iptables="iptables -w 100"
-        start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rule failed." && stop_redirect >> /dev/null 2>&1)
+        start_redirect && log "[Info]: create iptables transparent proxy rules done." || (log "[Error]: create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
         [ "${ipv6}" = "enable" ] && enable_ipv6 && log "[Info]: enable IPv6." || (disable_ipv6 && log "[Info]: disable IPv6.")
       fi
       ;;
