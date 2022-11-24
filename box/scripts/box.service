@@ -133,11 +133,11 @@ wait_bin_listen() {
 check_permission() {
   if which ${bin_name} | grep -q "/system/bin/" ; then
     bin_path=$(which ${bin_name})
+    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
+    setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || (box_user_group="root:net_admin" && log "[Error]: setcap authorization failed, you may need libcap package.")
     chown ${box_user_group} ${bin_path}
     chown -R ${box_user_group} ${box_path}
     chmod 0700 ${bin_path}
-    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
-    setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} && log "[Info]: ${bin_name} will be started with the ${box_user_group} user group." || box_user_group="root:net_admin"
   elif [ -f ${bin_path} ] ; then
     box_user_group="root:net_admin"
     chown ${box_user_group} ${bin_path}
@@ -155,7 +155,8 @@ start_service() {
   fi
 
   if check_permission ; then
-    create_tun_link
+    log "[Info]: ${bin_name} will be started with the ${box_user_group} user group."
+    [ "${proxy_method}" != "TPROXY" ] && create_tun_link
     if start_bin && wait_bin_listen ; then
       log "[Info]: ${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
       probe_tun_device && forward -I
