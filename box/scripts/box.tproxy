@@ -379,6 +379,7 @@ if [ "${proxy_mode}" != "core" ] ; then
       iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
       sleep 1
       find_packages_uid
+      intranet[${#intranet[@]}]=$(ip address | grep -w inet | grep -v 127 | awk '{print $2}')
       if [ "${proxy_method}" = "TPROXY" ] ; then
         if (zcat /proc/config.gz | grep -q TPROXY) ; then
           log "[Info]: use TPROXY:TCP+UDP."
@@ -389,6 +390,7 @@ if [ "${proxy_mode}" != "core" ] ; then
             log "[Info]: use IPv6."
             enable_ipv6
             iptables="ip6tables -w 100"
+            intranet6[${#intranet6[@]}]=$(ip address | grep -w inet6 | grep -v ::1 | grep -v fe80 | awk '{print $2}')
             start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
           else
             disable_ipv6
@@ -428,6 +430,7 @@ if [ "${proxy_mode}" != "core" ] ; then
       log "[Warning]: clean up ip(6)tables transparent proxy rules done."
       sleep 3
       find_packages_uid
+      intranet[${#intranet[@]}]=$(ip address | grep -w inet | grep -v 127 | awk '{print $2}')
       if [ "${proxy_method}" = "TPROXY" ] ; then
         if (zcat /proc/config.gz | grep -q TPROXY) ; then
           log "[Info]: use TPROXY:TCP+UDP."
@@ -438,6 +441,7 @@ if [ "${proxy_mode}" != "core" ] ; then
             log "[Info]: use IPv6."
             enable_ipv6
             iptables="ip6tables -w 100"
+            intranet6[${#intranet6[@]}]=$(ip address | grep -w inet6 | grep -v ::1 | grep -v fe80 | awk '{print $2}')
             start_tproxy && log "[Info]: create ip6tables transparent proxy rules done." || (log "[Error]: create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
           else
             disable_ipv6
