@@ -146,17 +146,21 @@ wait_bin_listen() {
 
 check_permission() {
   if which ${bin_name} | grep -q "/system/bin/" ; then
+    id -u $(echo ${box_user_group} | awk -F ':' '{print $1}') >/dev/null 2>&1 && \
+    id -g $(echo ${box_user_group} | awk -F ':' '{print $2}') >/dev/null 2>&1 || \
+    (box_user_group="root:net_admin" && log Error "${box_user_group} error, use root:net_admin instead.")
     bin_path=$(which ${bin_name})
-    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
-    setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || (box_user_group="root:net_admin" && log Error "setcap authorization failed, you may need libcap package.")
     chown ${box_user_group} ${bin_path}
-    chown -R ${box_user_group} ${box_path}
     chmod 0700 ${bin_path}
+    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
+    setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
+    (box_user_group="root:net_admin" && log Error "setcap authorization failed, you may need libcap package.")
+    chown -R ${box_user_group} ${box_path}
   elif [ -f ${bin_path} ] ; then
     box_user_group="root:net_admin"
     chown ${box_user_group} ${bin_path}
-    chown -R ${box_user_group} ${box_path}
     chmod 0700 ${bin_path}
+    chown -R ${box_user_group} ${box_path}
   else
     return 1
   fi
