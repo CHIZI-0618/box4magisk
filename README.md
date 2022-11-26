@@ -60,6 +60,12 @@
 
 - 打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_method` 的值为 `REDIRECT` 或 `MIXED` 则使用 REDIRECT 代理 TCP，在 Box 内核（仅 sing-box、clash 支持 TUN）没有启用 TUN 时 UDP 不会被代理
 
+#### 更改启动 Box 服务的用户
+
+- Box 默认使用 `root:net_admin` 用户用户组启动
+
+- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `box_user_group` 的值为设备中已存在的 `UID:GID`，此时 Box 内核必须在 `/system/bin/` 目录中（可以使用 Magisk），且需要 `setcap` 二进制，它被包含在 [libcap](https://android.googlesource.com/platform/external/libcap/) 中
+
 #### 连接到 WLAN 或开热点时绕过透明代理
 
 - Box 默认透明代理本机与热点（包括 USB 网络共享）
@@ -94,8 +100,7 @@
 
     `/data/adb/box/scripts/box.service status`
     
-
-    终端执行时回显日志，且同步输出至日志文件中
+    终端会打印日志，且同步输出至日志文件中
 
 ##### 管理透明代理是否启用
 
@@ -115,23 +120,23 @@
 
     `/data/adb/box/scripts/box.tproxy renew`
     
-    终端执行时回显日志，且同步输出至日志文件中
+    终端会打印日志，且同步输出至日志文件中
 
 
 ## 其他说明
 
-- 修改各核心配置文件时请保证 `tprxoy` 相关的配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致。
+- 修改各核心配置文件时请保证 `tprxoy` 相关的配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致
   
-  ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L11-L15)~~。
+- ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L11-L15)~~
 
-- 如本机存在**公网 IP** 地址请将 IP 添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中，防止流量环路。
+- 如本机存在**公网 IP** 地址请将 IP 添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中，防止流量环路
 
 - Box 服务的日志在 `/data/adb/box/run` 目录
 
 
 ## 卸载
 
-- 从 Magisk Manager 应用卸载本模块，会删除 `/data/adb/service.d/box4magisk_service.sh`，保留 Box 数据目录 `/data/adb/box`。
+- 从 Magisk Manager 应用卸载本模块，会删除 `/data/adb/service.d/box4magisk_service.sh`，保留 Box 数据目录 `/data/adb/box`
 - 可使用命令清除 Box 数据：`rm -rf /data/adb/box`
 
 ## 更新日志
