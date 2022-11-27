@@ -373,6 +373,7 @@ disable_ipv6() {
   echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
   echo 1 > /proc/sys/net/ipv6/conf/default/disable_ipv6
   echo 1 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6
+  ip -6 rule add unreachable pref 100
 }
 
 enable_ipv6() {
@@ -381,6 +382,7 @@ enable_ipv6() {
   echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6
   echo 0 > /proc/sys/net/ipv6/conf/default/disable_ipv6
   echo 0 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6
+  ip -6 rule del unreachable pref 100
 }
 
 if [ "${proxy_mode}" != "core" ] ; then
