@@ -223,6 +223,6 @@ case "$1" in
     display_bin_pid
     ;;
   *)
-    echo "$0:  usage:  $0 {start|stop|restart|status}"
+    log Error "$0 $1 usage: $0 {start|stop|restart|status}"
     ;;
 esac
