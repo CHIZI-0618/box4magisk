@@ -3,6 +3,8 @@
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 
+source ${scripts_dir}/box.config
+
 service_path="${scripts_dir}/box.service"
 tproxy_path="${scripts_dir}/box.tproxy"
 
