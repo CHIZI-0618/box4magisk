@@ -48,3 +48,11 @@ set_perm /data/adb/service.d/box4magisk_service.sh 0 0 0700
 #fix "set_perm_recursive /data/adb/box/scripts" not working on some phones. It didn't work on my Oneplus 7 pro and Remi K50.
 chmod ugo+x /data/adb/box/scripts/*
 chmod ugo+x /data/adb/box/bin/*
+
+for pid in $(pidof inotifyd) ; do
+  if grep -q box.inotify /proc/${pid}/cmdline ; then
+    kill ${pid}
+  fi
+done
+
+inotifyd "/data/adb/box/scripts/box.inotify" "/data/adb/modules/box4magisk" > /dev/null 2>&1 &
