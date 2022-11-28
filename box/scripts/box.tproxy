@@ -69,18 +69,24 @@ start_redirect() {
 
   ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i lo -j REDIRECT --to-ports ${redir_port}
 
-  for ap in ${ap_list[@]} ; do
-    ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i ${ap} -j REDIRECT --to-ports ${redir_port}
-  done
+  if [ "${ap_list}" != "" ] ; then
+    for ap in ${ap_list[@]} ; do
+      ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i ${ap} -j REDIRECT --to-ports ${redir_port}
+    done
+    log Info "${ap_list[*]} transparent proxy."
+  fi
 
   ${iptables} -t nat -I PREROUTING -j BOX_EXTERNAL
 
 
   ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
 
-  for ignore in ${ignore_out_list[@]} ; do
-    ${iptables} -t nat -I BOX_LOCAL -o ${ignore} -j RETURN
-  done
+  if [ "${ignore_out_list}" != "" ] ; then
+    for ignore in ${ignore_out_list[@]} ; do
+      ${iptables} -t nat -I BOX_LOCAL -o ${ignore} -j RETURN
+    done
+    log Info "${ignore_out_list[*]} ignore transparent proxy."
+  fi
 
   if [ "${proxy_mode}" = "blacklist" ] ; then
     if [ "${uid_list}" = "" ] ; then
@@ -187,10 +193,13 @@ start_tproxy() {
   # Allow ap interface
   # Notice: Old android device may only have one wlan interface.
   # Some new android device have multiple wlan interface like wlan0(for internet), wlan1(for AP).
-  for ap in ${ap_list[@]} ; do
-    ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -i ${ap} -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${id}
-    ${iptables} -t mangle -A BOX_EXTERNAL -p udp -i ${ap} -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${id}
-  done
+  if [ "${ap_list}" != "" ] ; then
+    for ap in ${ap_list[@]} ; do
+      ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -i ${ap} -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${id}
+      ${iptables} -t mangle -A BOX_EXTERNAL -p udp -i ${ap} -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${id}
+    done
+    log Info "${ap_list[*]} transparent proxy."
+  fi
 
   ${iptables} -t mangle -I PREROUTING -j BOX_EXTERNAL
 
@@ -199,9 +208,12 @@ start_tproxy() {
   ${iptables} -t mangle -F BOX_LOCAL
 
   # Bypass ignored interfaces
-  for ignore in ${ignore_out_list[@]} ; do
-    ${iptables} -t mangle -I BOX_LOCAL -o ${ignore} -j RETURN
-  done
+  if [ "${ignore_out_list}" != "" ] ; then
+    for ignore in ${ignore_out_list[@]} ; do
+      ${iptables} -t mangle -I BOX_LOCAL -o ${ignore} -j RETURN
+    done
+    log Info "${ignore_out_list[*]} ignore transparent proxy."
+  fi
 
   # Bypass intranet
   # ${iptables} -t mangle -A BOX_LOCAL -m addrtype --dst-type LOCAL -j RETURN
