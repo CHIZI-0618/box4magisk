@@ -18,20 +18,20 @@ find ${box_path} -mtime +3 -type f -name "*.log" | xargs rm -f
 
 log() {
   export TZ=Asia/Shanghai
-  now=$(date +"[%Y-%m-%d %H:%M:%S]")
+  now=$(date +"[%Y-%m-%d %H:%M:%S %Z]")
   case $1 in
-  Info)
-    [ -t 1 ] && echo -e "\033[1;32m${now} [Info]: $2\033[0m" || echo "${now} [Info]: $2"
-    ;;
-  Warn)
-    [ -t 1 ] && echo -e "\033[1;33m${now} [Warn]: $2\033[0m" || echo "${now} [Warn]: $2"
-    ;;
-  Error)
-    [ -t 1 ] && echo -e "\033[1;31m${now} [Error]: $2\033[0m" || echo "${now} [Error]: $2"
-    ;;
-  *)
-    [ -t 1 ] && echo -e "\033[1;30m${now} [$1]: $2\033[0m" || echo "${now} [$1]: $2"
-    ;;
+    Info)
+      [ -t 1 ] && echo -e "\033[1;32m${now} [Info]: $2\033[0m" || echo "${now} [Info]: $2"
+      ;;
+    Warn)
+      [ -t 1 ] && echo -e "\033[1;33m${now} [Warn]: $2\033[0m" || echo "${now} [Warn]: $2"
+      ;;
+    Error)
+      [ -t 1 ] && echo -e "\033[1;31m${now} [Error]: $2\033[0m" || echo "${now} [Error]: $2"
+      ;;
+    *)
+      [ -t 1 ] && echo -e "\033[1;30m${now} [$1]: $2\033[0m" || echo "${now} [$1]: $2"
+      ;;
   esac
 }
 
@@ -65,54 +65,54 @@ probe_tun_device() {
 start_bin() {
   ulimit -SHn 1000000
   case "${bin_name}" in
-  sing-box)
-    if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-      log Info "starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
-      echo -n $! > ${pid_file}
-      return 0
-    else
-      log Error "configuration check failed, please check the ${run_path}/check.log file."
-      return 1
-    fi
-    ;;
-  clash)
-    if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-      log Info "starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
-      echo -n $! > ${pid_file}
-      return 0
-    else
-      log Error "configuration check failed, please check the ${run_path}/check.log file."
-      return 1
-    fi
-    ;;
-  xray)
-    if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-      log Info "starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
-      echo -n $! > ${pid_file}
-      return 0
-    else
-      log Error "configuration check failed, please check the ${run_path}/check.log file."
-      return 1
-    fi
-    ;;
-  v2ray)
-    if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-      log Info "starting ${bin_name} service."
-      nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
-      echo -n $! > ${pid_file}
-      return 0
-    else
-      log Error "configuration check failed, please check the ${run_path}/check.log file."
-      return 1
-    fi
-    ;;
-  *)
-    log Error "core error."
-    return 2
-    ;;
+    sing-box)
+      if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    clash)
+      if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    xray)
+      if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    v2ray)
+      if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    *)
+      log Error "$1 core error, it must be one of ${bin_name_list[@]}"
+      return 2
+      ;;
   esac
 }
 
@@ -132,7 +132,7 @@ wait_bin_listen() {
   wait_count=0
   bin_pid=$(cat ${pid_file})
   find_netstat_path && \
-  check_bin_cmd="netstat -tnulp | grep ${bin_name} >> /dev/null" || \
+  check_bin_cmd="netstat -tnulp | grep -q ${bin_name}" || \
   check_bin_cmd="ls -lh /proc/${bin_pid}/fd | grep -q socket"
   while probe_bin_alive && ! eval "${check_bin_cmd}" && [ ${wait_count} -lt 100 ] ; do
     sleep 1 ; wait_count=$((${wait_count} + 1))
@@ -146,21 +146,28 @@ wait_bin_listen() {
 
 check_permission() {
   if which ${bin_name} | grep -q "/system/bin/" ; then
-    id -u $(echo ${box_user_group} | awk -F ':' '{print $1}') >/dev/null 2>&1 && \
-    id -g $(echo ${box_user_group} | awk -F ':' '{print $2}') >/dev/null 2>&1 || \
+    box_user=$(echo ${box_user_group} | awk -F ':' '{print $1}')
+    box_group=$(echo ${box_user_group} | awk -F ':' '{print $2}')
+    box_user_id=$(id -u ${box_user})
+    box_group_id=$(id -g ${box_group})
+    [ ${box_user_id} ] && [ ${box_group_id} ] || \
     (box_user_group="root:net_admin" && log Error "${box_user_group} error, use root:net_admin instead.")
     bin_path=$(which ${bin_name})
     chown ${box_user_group} ${bin_path}
     chmod 0700 ${bin_path}
-    # setcap has been deprecated as it does not support binary outside of the /system/bin directory
-    setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
-    (box_user_group="root:net_admin" && log Error "setcap authorization failed, you may need libcap package.")
+    if [ "${box_user_id}" != "0" ] || [ "${box_group_id}" != "3005" ] ; then
+      # setcap has been deprecated as it does not support binary outside of the /system/bin directory
+      setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
+      (box_user_group="root:net_admin" && log Error "setcap authorization failed, you may need libcap package.")
+    fi
     chown -R ${box_user_group} ${box_path}
+    return 0
   elif [ -f ${bin_path} ] ; then
     box_user_group="root:net_admin"
     chown ${box_user_group} ${bin_path}
     chmod 0700 ${bin_path}
     chown -R ${box_user_group} ${box_path}
+    return 0
   else
     return 1
   fi

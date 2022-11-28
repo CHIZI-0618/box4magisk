@@ -13,4 +13,4 @@ done
 ${scripts_dir}/start.sh
 )&
 
-inotifyd ${scripts_dir}/box.inotify ${module_dir} >> /dev/null &
+inotifyd ${scripts_dir}/box.inotify ${module_dir} > /dev/null 2>&1 &

@@ -27,11 +27,12 @@ if [ -d /data/adb/box ] ; then
   awk '!x[$0]++' $MODPATH/box/scripts/box.config > /data/adb/box/scripts/box.config
 
   rm -rf $MODPATH/box
-
-  mkdir -p /data/adb/box/bin/
 else
   mv $MODPATH/box /data/adb/
 fi
+
+mkdir -p /data/adb/box/bin/
+mkdir -p /data/adb/box/run/
 
 mv -f $MODPATH/box4magisk_service.sh /data/adb/service.d/
 
@@ -40,8 +41,10 @@ rm -f customize.sh
 set_perm_recursive $MODPATH 0 0 0755 0644
 set_perm_recursive /data/adb/box/ 0 0 0755 0644
 set_perm_recursive /data/adb/box/scripts/ 0 0 0755 0700
+set_perm_recursive /data/adb/box/bin/ 0 0 0755 0700
 
 set_perm /data/adb/service.d/box4magisk_service.sh 0 0 0700
 
 #fix "set_perm_recursive /data/adb/box/scripts" not working on some phones. It didn't work on my Oneplus 7 pro and Remi K50.
 chmod ugo+x /data/adb/box/scripts/*
+chmod ugo+x /data/adb/box/bin/*

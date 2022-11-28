@@ -6,6 +6,7 @@ module_dir="/data/adb/modules/box4magisk"
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
+
 source ${scripts_dir}/box.config
 
 wait_until_login(){
@@ -22,6 +23,7 @@ wait_until_login(){
 wait_until_login
 
 rm ${pid_file}
+mkdir -p ${run_path}
 
 if [ ! -f ${box_path}/manual ] && [ ! -f ${module_dir}/disable ] ; then
   mv ${run_path}/run.log ${run_path}/run.log.bak
