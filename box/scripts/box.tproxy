@@ -7,7 +7,7 @@ source ${scripts_dir}/box.config
 
 log() {
   export TZ=Asia/Shanghai
-  now=$(date +"[%Y-%m-%d %H:%M:%S]")
+  now=$(date +"[%Y-%m-%d %H:%M:%S %Z]")
   case $1 in
     Info)
       [ -t 1 ] && echo -e "\033[1;32m${now} [Info]: $2\033[0m" || echo "${now} [Info]: $2"
@@ -94,7 +94,7 @@ start_redirect() {
       done
       # Allow !app
       ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
-      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[@]} no transparent proxy."
+      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} no transparent proxy."
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
     # Route apps to Box
@@ -103,7 +103,7 @@ start_redirect() {
     done
     ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
     ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}
-    log Info "proxy mode: ${proxy_mode}, ${user_packages_list[@]} transparent proxy."
+    log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
   else
     log Warn "proxy mode: ${proxy_mode} error."
     # Route Everything
@@ -253,7 +253,7 @@ start_tproxy() {
       # Allow !app
       ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark ${id}
       ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
-      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[@]} no transparent proxy."
+      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} no transparent proxy."
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
     # Route apps to Box
@@ -268,7 +268,7 @@ start_tproxy() {
     ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
     # Route DNS request to Box
     ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j MARK --set-mark ${id}
-    log Info "proxy mode: ${proxy_mode}, ${user_packages_list[@]} transparent proxy."
+    log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
   else
     log Warn "proxy mode: ${proxy_mode} error."
     # Route Everything

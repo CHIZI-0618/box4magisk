@@ -110,7 +110,7 @@ start_bin() {
       fi
       ;;
     *)
-      log Error "$1 core error, it must be one of ${bin_name_list[@]}"
+      log Error "$1 core error, it must be one of ${bin_name_list[*]}"
       return 2
       ;;
   esac
