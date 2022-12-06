@@ -34,7 +34,7 @@ find_packages_uid() {
 }
 
 probe_user_group() {
-  if [ -f ${pid_file} ] && bin_pid=$(cat ${pid_file}) && grep -q ${bin_name} /proc/${bin_pid}/cmdline ; then
+  if bin_pid=$(pidof ${bin_name}) ; then
     box_user=$(stat -c %U /proc/${bin_pid})
     box_group=$(stat -c %G /proc/${bin_pid})
     return 0
@@ -417,7 +417,7 @@ case "$1" in
     iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
     sleep 1
     if ! probe_user_group ; then
-      log Error "failed to check Box user group, please make sure Box core is started."
+      log Error "failed to check Box user group, please make sure ${bin_name} core is started."
       return 1
     fi
     find_packages_uid
@@ -473,7 +473,7 @@ case "$1" in
     log Warn "clean up ip(6)tables transparent proxy rules done."
     sleep 3
     if ! probe_user_group ; then
-      log Error "failed to check Box user group, please make sure Box core is started."
+      log Error "failed to check Box user group, please make sure ${bin_name} core is started."
       return 1
     fi
     find_packages_uid
