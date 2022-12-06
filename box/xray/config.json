@@ -1,0 +1,156 @@
+{
+	"log": {
+		"access": "none",
+		"loglevel": "warning",
+		"dnsLog": true
+	},
+	"inbounds": [
+		{
+			"tag": "proxy-in",
+			"port": 1536,
+			"protocol": "dokodemo-door",
+			"settings": {
+				"network": "tcp,udp",
+				"followRedirect": true
+			},
+			"streamSettings": {
+				"sockopt": {
+					"tproxy": "tproxy"
+				}
+			},
+			"sniffing": {
+				"enabled": true,
+				"routeOnly": true,
+				"destOverride": ["http", "tls"]
+			}
+		}
+	],
+	"outbounds": [
+		{
+			"tag": "proxy",
+			"protocol": "VLESS",
+			"settings": {
+				"vnext": [
+					{
+						"address": "1.1.1.1",
+						"port": 443,
+						"users": [
+							{
+								"id": "00000000-0000-0000-0000-000000000000",
+								"alterId": 0,
+								"email": "t@t.tt",
+								"security": "none",
+								"encryption": "none",
+								"flow": "xtls-rprx-splice"
+							}
+						]
+					}
+				],
+				"servers": null,
+				"response": null
+			},
+			"streamSettings": {
+				"network": "tcp",
+				"security": "xtls",
+				"xtlsSettings": {
+					"allowInsecure": false,
+					"serverName": "one.one.one.one"
+				},
+				"tcpSettings": null,
+				"sockopt": {
+					"domainStrategy": "UseIPv4"
+				}
+			},
+			"mux": {
+				"concurrency": -1,
+				"enabled": false
+			}
+		},
+		{
+			"tag": "direct",
+			"protocol": "freedom",
+			"settings": {
+				"domainStrategy": "UseIP"
+			}
+		},
+		{
+			"tag": "block",
+			"protocol": "blackhole",
+			"settings": {
+				"response": {
+					"type": "http"
+				}
+			},
+			"streamSettings": null,
+			"mux": null
+		},
+		{
+			"tag": "dns-out",
+			"protocol": "dns",
+			"settings": {
+				"address": "8.8.8.8"
+			}
+		}
+	],
+	"dns": {
+		"hosts": {
+			"domain:googleapis.cn": "googleapis.com",
+			"geosite:category-ads-all": "127.0.0.1"
+		},
+		"servers": [
+			{
+				"address": "https+local://1.1.1.1/dns-query",
+				"domains": ["geosite:geolocation-!cn"]
+			},
+			{
+				"address": "https+local://223.5.5.5/dns-query",
+				"domains": ["geosite:cn", "geosite:geolocation-cn"]
+			},
+			"https+local://223.5.5.5/dns-query"
+		],
+		"tag": "dns",
+		"queryStrategy": "UseIP"
+	},
+	"routing": {
+		"domainStrategy": "IPIfNonMatch",
+		"domainMatcher": "mph",
+		"rules": [
+			{
+				"type": "field",
+				"port": 53,
+				"inboundTag": ["proxy-in"],
+				"outboundTag": "dns-out"
+			},
+			{
+				"type": "field",
+				"outboundTag": "direct",
+				"protocol": ["bittorrent"]
+			},
+			{
+				"domains": ["geosite:category-ads-all"],
+				"outboundTag": "block",
+				"type": "field"
+			},
+			{
+				"domains": ["geosite:geolocation-!cn"],
+				"outboundTag": "proxy",
+				"type": "field"
+			},
+			{
+				"ip": ["geoip:cn", "geoip:private"],
+				"outboundTag": "direct",
+				"type": "field"
+			},
+			{
+				"domains": ["geosite:cn", "geosite:private"],
+				"outboundTag": "direct",
+				"type": "field"
+			},
+			{
+				"network": "tcp,udp",
+				"outboundTag": "proxy",
+				"type": "field"
+			}
+		]
+	}
+}
