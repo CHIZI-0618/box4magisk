@@ -1,5 +1,7 @@
 #!/system/bin/sh
 
+export PATH=$(magisk --path)/.magisk/busybox:$PATH:/data/data/com.termux/files/usr/bin
+
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 
@@ -35,24 +37,6 @@ log() {
   esac
 }
 
-find_netstat_path() {
-  [ -f /system/bin/netstat ] && alias netstat="/system/bin/netstat" && return 0
-  [ -f /system/xbin/netstat ] && alias netstat="/system/xbin/netstat" && return 0
-  return 1
-}
-
-probe_bin_alive() {
-  [ -f ${pid_file} ] && cmd_file="/proc/$(cat ${pid_file})/cmdline" || return 1
-  [ -f ${cmd_file} ] && grep -q ${bin_name} ${cmd_file} && return 0 || return 1
-}
-
-forward() {
-  iptables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
-  iptables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
-  ip6tables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
-  ip6tables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
-}
-
 create_tun_link() {
   mkdir -p /dev/net
   [ ! -L /dev/net/tun ] && ln -s /dev/tun /dev/net/tun
@@ -62,86 +46,11 @@ probe_tun_device() {
   ifconfig | grep -q ${tun_device} || return 1
 }
 
-start_bin() {
-  ulimit -SHn 1000000
-  case "${bin_name}" in
-    sing-box)
-      if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-        log Info "starting ${bin_name} service."
-        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
-        echo -n $! > ${pid_file}
-        return 0
-      else
-        log Error "configuration check failed, please check the ${run_path}/check.log file."
-        return 1
-      fi
-      ;;
-    clash)
-      if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-        log Info "starting ${bin_name} service."
-        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
-        echo -n $! > ${pid_file}
-        return 0
-      else
-        log Error "configuration check failed, please check the ${run_path}/check.log file."
-        return 1
-      fi
-      ;;
-    xray)
-      if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-        log Info "starting ${bin_name} service."
-        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
-        echo -n $! > ${pid_file}
-        return 0
-      else
-        log Error "configuration check failed, please check the ${run_path}/check.log file."
-        return 1
-      fi
-      ;;
-    v2ray)
-      if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
-        log Info "starting ${bin_name} service."
-        nohup ${magisk_busybox} setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
-        echo -n $! > ${pid_file}
-        return 0
-      else
-        log Error "configuration check failed, please check the ${run_path}/check.log file."
-        return 1
-      fi
-      ;;
-    *)
-      log Error "$1 core error, it must be one of ${bin_name_list[*]}"
-      return 2
-      ;;
-  esac
-}
-
-display_bin_pid() {
-  if probe_bin_alive ; then
-    bin_pid=$(cat ${pid_file})
-    log Info "${bin_name} has started with the $(stat -c %U:%G /proc/${bin_pid}) user group."
-    log Info "${bin_name} service is running. ( PID: ${bin_pid} )"
-    return 0
-  else
-    log Warn "${bin_name} service is stopped."
-    return 1
-  fi
-}
-
-wait_bin_listen() {
-  wait_count=0
-  bin_pid=$(cat ${pid_file})
-  find_netstat_path && \
-  check_bin_cmd="netstat -tnulp | grep -q ${bin_name}" || \
-  check_bin_cmd="ls -lh /proc/${bin_pid}/fd | grep -q socket"
-  while probe_bin_alive && ! eval "${check_bin_cmd}" && [ ${wait_count} -lt 100 ] ; do
-    sleep 1 ; wait_count=$((${wait_count} + 1))
-  done
-  if probe_bin_alive && eval "${check_bin_cmd}" ; then
-    return 0
-  else
-    return 1
-  fi
+forward() {
+  iptables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
+  iptables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
+  ip6tables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
+  ip6tables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
 }
 
 check_permission() {
@@ -173,12 +82,98 @@ check_permission() {
   fi
 }
 
-start_service() {
-  if probe_bin_alive ; then
-    log Info "${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
-    return 0
-  fi
+start_bin() {
+  ulimit -SHn 1000000
+  case "${bin_name}" in
+    sing-box)
+      if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    clash)
+      if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    xray)
+      if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    v2ray)
+      if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
+        log Info "starting ${bin_name} service."
+        nohup setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        echo -n $! > ${pid_file}
+        return 0
+      else
+        log Error "configuration check failed, please check the ${run_path}/check.log file."
+        return 1
+      fi
+      ;;
+    *)
+      log Error "$1 core error, it must be one of ${bin_name_list[*]}"
+      return 2
+      ;;
+  esac
+}
 
+find_netstat_path() {
+  [ -f /system/bin/netstat ] && alias netstat="/system/bin/netstat" && return 0
+  [ -f /system/xbin/netstat ] && alias netstat="/system/xbin/netstat" && return 0
+  return 1
+}
+
+wait_bin_listen() {
+  wait_count=0
+  bin_pid=$(pidof ${bin_name})
+  find_netstat_path && \
+  check_bin_cmd="netstat -tnulp | grep -q ${bin_name}" || \
+  check_bin_cmd="ls -lh /proc/${bin_pid}/fd | grep -q socket"
+  while [ ${bin_pid} ] && ! eval "${check_bin_cmd}" && [ ${wait_count} -lt 100 ] ; do
+    sleep 1 ; wait_count=$((${wait_count} + 1))
+  done
+  if [ ${bin_pid} ] && eval "${check_bin_cmd}" ; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+display_bin_pid() {
+  if bin_pid=$(pidof ${bin_name}) ; then
+    log Info "${bin_name} has started with the $(stat -c %U:%G /proc/${bin_pid}) user group."
+    log Info "${bin_name} service is running. ( PID: ${bin_pid} )"
+    log Info "${bin_name} memory usage: $(cat /proc/${bin_pid}/status | grep -w VmRSS | awk '{print $2,$3}')"
+    runtime=$(ps -o comm,etime | grep ${bin_name} | awk '{print $2}')
+    log Info "${bin_name} running time: ${runtime}"
+    echo -n ${bin_pid} > ${pid_file}
+    return 0
+  else
+    log Warn "${bin_name} service is stopped."
+    return 1
+  fi
+}
+
+start_service() {
   if check_permission ; then
     log Info "${bin_name} will be started with the ${box_user_group} user group."
     [ "${proxy_method}" != "TPROXY" ] && create_tun_link
@@ -187,8 +182,8 @@ start_service() {
       probe_tun_device && forward -I
       return 0
     else
-      if probe_bin_alive ; then
-        log Warn "${bin_name} service is running but may not listening. ( PID: $(cat ${pid_file}) )"
+      if bin_pid=$(pidof ${bin_name}) ; then
+        log Warn "${bin_name} service is running but may not listening. ( PID: ${bin_pid} )"
         probe_tun_device && forward -I
         return 0
       else
@@ -211,12 +206,12 @@ stop_service() {
     sleep 1
     display_bin_pid
   fi
-  rm -f ${pid_file}
+  rm -f ${pid_file} >> /dev/null 2>&1
 }
 
 case "$1" in
   start)
-    start_service
+    display_bin_pid || start_service
     ;;
   stop)
     stop_service

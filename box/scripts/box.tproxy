@@ -1,9 +1,13 @@
 #!/system/bin/sh
 
+export PATH=$(magisk --path)/.magisk/busybox:$PATH:/data/data/com.termux/files/usr/bin
+
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 
 source ${scripts_dir}/box.config
+id="222"
+# routing_mark="233"
 
 log() {
   export TZ=Asia/Shanghai
