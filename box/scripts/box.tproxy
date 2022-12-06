@@ -279,7 +279,7 @@ start_tproxy() {
     ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
     ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
     # Route DNS request to Box
-    ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j MARK --set-mark ${id}
+    [ "${bin_name}" != "clash" ] && ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j MARK --set-mark ${id}
     log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
   else
     log Warn "proxy mode: ${proxy_mode} error."
