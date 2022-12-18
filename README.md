@@ -95,13 +95,11 @@
   - 重启服务：
 
     `/data/adb/box/scripts/box.service restart`
- 
+
   - 显示状态：
 
     `/data/adb/box/scripts/box.service status`
-    
-    终端会打印日志，且同步输出至日志文件中
-
+  
 ##### 管理透明代理是否启用
 
 - 透明代理脚本是 `/data/adb/box/scripts/box.tproxy`
@@ -119,10 +117,7 @@
   - 重载透明代理：
 
     `/data/adb/box/scripts/box.tproxy renew`
-    
-    终端会打印日志，且同步输出至日志文件中
-
-
+  
 ## 其他说明
 
 - 修改各核心配置文件时请保证 `tprxoy` 相关的配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致
@@ -142,3 +137,8 @@
 ## 更新日志
 
 [CHANGELOG](changelog.md)
+
+
+## 项目 Star 数增长趋势图
+
+[![Stargazers over time](https://starchart.cc/CHIZI-0618/box4magisk.svg)](https://starchart.cc/CHIZI-0618/box4magisk)
