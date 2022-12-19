@@ -158,13 +158,13 @@ wait_bin_listen() {
   fi
 }
 
-display_bin_pid() {
+display_bin_status() {
   if bin_pid=$(pidof ${bin_name}) ; then
     log Info "${bin_name} has started with the $(stat -c %U:%G /proc/${bin_pid}) user group."
     log Info "${bin_name} service is running. ( PID: ${bin_pid} )"
-    log Info "${bin_name} memory usage: $(cat /proc/${bin_pid}/status | grep -w VmRSS | awk '{print $2,$3}')"
-    runtime=$(ps -o comm,etime | grep ${bin_name} | awk '{print $2}')
-    log Info "${bin_name} running time: ${runtime}"
+    log Info "${bin_name} memory usage: $(cat /proc/${bin_pid}/status | grep -w VmRSS | awk '{print $2$3}')"
+    log Info "${bin_name} cpu usage: $((/system/bin/ps -eo %CPU,NAME | grep ${bin_name} | awk '{print $1"%"}') 2> /dev/null || dumpsys cpuinfo | grep ${bin_name} | awk '{print $1}')"
+    log Info "${bin_name} running time: $(ps -o comm,etime | grep ${bin_name} | awk '{print $2}')"
     echo -n ${bin_pid} > ${pid_file}
     return 0
   else
@@ -199,19 +199,19 @@ start_service() {
 }
 
 stop_service() {
-  if display_bin_pid ; then
+  if display_bin_status ; then
     log Warn "stopping ${bin_name} service."
     kill $(cat ${pid_file}) || killall ${bin_name}
     forward -D >> /dev/null 2>&1
     sleep 1
-    display_bin_pid
+    display_bin_status
   fi
   rm -f ${pid_file} >> /dev/null 2>&1
 }
 
 case "$1" in
   start)
-    display_bin_pid || start_service
+    display_bin_status || start_service
     ;;
   stop)
     stop_service
@@ -222,7 +222,7 @@ case "$1" in
     start_service
     ;;
   status)
-    display_bin_pid
+    display_bin_status
     ;;
   *)
     log Error "$0 $1 usage: $0 {start|stop|restart|status}"
