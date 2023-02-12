@@ -1,8 +1,6 @@
 #!/system/bin/sh
 
-module_dir="/data/adb/modules/box4magisk"
-
-[ -n "$(magisk -v | grep lite)" ] && module_dir=/data/adb/lite_modules/box4magisk
+module_dir="/data/adb/ksu/modules/box4KSU"
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})

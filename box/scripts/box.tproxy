@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-export PATH=$(magisk --path)/.magisk/busybox:$PATH:/data/data/com.termux/files/usr/bin
+busybox_path="/data/adb/ksu/bin/busybox"
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})

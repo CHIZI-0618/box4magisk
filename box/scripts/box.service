@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-export PATH=$(magisk --path)/.magisk/busybox:$PATH:/data/data/com.termux/files/usr/bin
+busybox_path="/data/adb/ksu/bin/busybox"
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
@@ -88,7 +88,7 @@ start_bin() {
     sing-box)
       if ${bin_path} check -D ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
-        nohup setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        nohup ${busybox_path} setuidgid ${box_user_group} ${bin_path} run -D ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
         echo -n $! > ${pid_file}
         return 0
       else
@@ -99,7 +99,7 @@ start_bin() {
     clash)
       if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
-        nohup setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
+        nohup ${busybox_path} setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
         echo -n $! > ${pid_file}
         return 0
       else
@@ -110,7 +110,7 @@ start_bin() {
     xray)
       if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
-        nohup setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        nohup ${busybox_path} setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
         echo -n $! > ${pid_file}
         return 0
       else
@@ -121,7 +121,7 @@ start_bin() {
     v2ray)
       if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
-        nohup setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
+        nohup ${busybox_path} setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
         echo -n $! > ${pid_file}
         return 0
       else
@@ -144,7 +144,7 @@ find_netstat_path() {
 
 wait_bin_listen() {
   wait_count=0
-  bin_pid=$(pidof ${bin_name})
+  bin_pid=$(${busybox_path} pidof ${bin_name})
   find_netstat_path && \
   check_bin_cmd="netstat -tnulp | grep -q ${bin_name}" || \
   check_bin_cmd="ls -lh /proc/${bin_pid}/fd | grep -q socket"
@@ -159,12 +159,12 @@ wait_bin_listen() {
 }
 
 display_bin_status() {
-  if bin_pid=$(pidof ${bin_name}) ; then
+  if bin_pid=$(${busybox_path} pidof ${bin_name}) ; then
     log Info "${bin_name} has started with the $(stat -c %U:%G /proc/${bin_pid}) user group."
     log Info "${bin_name} service is running. ( PID: ${bin_pid} )"
     log Info "${bin_name} memory usage: $(cat /proc/${bin_pid}/status | grep -w VmRSS | awk '{print $2$3}')"
     log Info "${bin_name} cpu usage: $((/system/bin/ps -eo %CPU,NAME | grep ${bin_name} | awk '{print $1"%"}') 2> /dev/null || dumpsys cpuinfo | grep ${bin_name} | awk '{print $1}')"
-    log Info "${bin_name} running time: $(ps -o comm,etime | grep ${bin_name} | awk '{print $2}')"
+    log Info "${bin_name} running time: $(${busybox_path} ps -o comm,etime | grep ${bin_name} | awk '{print $2}')"
     echo -n ${bin_pid} > ${pid_file}
     return 0
   else
