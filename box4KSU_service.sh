@@ -1,6 +1,8 @@
 #!/system/bin/sh
 
-module_dir="/data/adb/ksu/modules/box4KernelSU"
+busybox_path="/data/adb/ksu/bin/busybox"
+
+module_dir="/data/adb/modules/box4KSU"
 
 scripts_dir="/data/adb/ksu/box/scripts"
 
@@ -11,4 +13,4 @@ done
 ${scripts_dir}/start.sh
 )&
 
-inotifyd ${scripts_dir}/box.inotify ${module_dir} > /dev/null 2>&1 &
+${busybox_path} inotifyd ${scripts_dir}/box.inotify ${module_dir} > /dev/null 2>&1 &

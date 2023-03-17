@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-module_dir="/data/adb/ksu/modules/box4KSU"
+module_dir="/data/adb/modules/box4KSU"
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
