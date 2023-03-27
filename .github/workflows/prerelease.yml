@@ -37,6 +37,6 @@ jobs:
         with:
           tag: Prerelease
           tag_name: Prerelease
-          files: box4magisk_v*.zip
+          files: box4_v*.zip
           prerelease: true
           generate_release_notes: true

@@ -1,8 +1,8 @@
 #!/system/bin/sh
 
-module_dir="/data/adb/modules/box4magisk"
+module_dir="/data/adb/modules/box4"
 
-[ -n "$(magisk -v | grep lite)" ] && module_dir=/data/adb/lite_modules/box4magisk
+[ -n "$(magisk -v | grep lite)" ] && module_dir=/data/adb/lite_modules/box4
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
@@ -11,7 +11,7 @@ source ${scripts_dir}/box.config
 
 wait_until_login(){
   # we doesn't have the permission to rw "/sdcard" before the user unlocks the screen
-  local test_file="/sdcard/Android/.BOXTEST"
+  local test_file="/sdcard/Android/.BOX4TEST"
   true > "$test_file"
   while [ ! -f "$test_file" ] ; do
     true > "$test_file"
