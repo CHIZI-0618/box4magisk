@@ -3,8 +3,10 @@
 SKIPUNZIP=1
 ASH_STANDALONE=1
 
-if [ $BOOTMODE ! = true ] ; then
+if ! [ "$BOOTMODE" ] ; then
   abort "Error: Please install in Magisk Manager or KernelSU Manager"
+elif [ "$KSU" ] && [ "$KSU_VER_CODE" -lt 10670 ]; then
+  abort "Error: Please update your KernelSU and KernelSU Manager"
 fi
 
 if [ "$KSU" ] && [ "$KSU_VER_CODE" -lt 10683 ]; then
