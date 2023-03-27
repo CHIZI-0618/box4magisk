@@ -9,7 +9,7 @@ elif [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10670 ] ; then
   abort "Error: Please update your KernelSU and KernelSU Manager or KernelSU Manager"
 fi
 
-if [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10683 ]; then
+if [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10683 ] ; then
   service_dir="/data/adb/ksu/service.d"
 else 
   service_dir="/data/adb/service.d"
