@@ -3,7 +3,7 @@
 SKIPUNZIP=1
 ASH_STANDALONE=1
 
-if [ $BOOTMODE ! = true ] ; then
+if [ "$BOOTMODE" ! = true ] ; then
   abort "Error: Please install in Magisk Manager or KernelSU Manager"
 elif [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10670 ]; then
   abort "Error: Please update your KernelSU and KernelSU Manager or KernelSU Manager"
@@ -40,10 +40,6 @@ else
 fi
 
 if [ "$KSU" = true ] ; then
-  sed -i 's/name=box4magisk/name=box4KernelSU/g' $MODPATH/module.prop
-fi
-
-if [ $KSU = true ] ; then
   sed -i 's/name=box4magisk/name=box4KernelSU/g' $MODPATH/module.prop
 fi
 
