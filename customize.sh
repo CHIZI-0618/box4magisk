@@ -9,6 +9,7 @@ fi
 
 if [ ! -d /data/adb/ksu/service.d ] ; then
   mkdir -p /data/adb/ksu/service.d
+fi
 if [ ! -d /data/adb/service.d ] ; then
   mkdir -p /data/adb/service.d
 fi
