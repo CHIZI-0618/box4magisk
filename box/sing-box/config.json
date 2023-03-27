@@ -1,21 +1,19 @@
 {
   "log": {
-    "disabled": false,
-    "level": "debug",
+    "level": "info",
     "output": "sing-box.log",
     "timestamp": true
   },
   "dns": {
     "servers": [
       {
-        "tag": "google",
-        "address": "tcp://8.8.8.8",
+        "tag": "cloudflare",
+        "address": "tls://1.1.1.1",
         "detour": "Proxy"
       },
       {
-        "tag": "alidns",
-        "address": "https://223.5.5.5/dns-query",
-        "detour": "direct"
+        "tag": "fakedns",
+        "address": "fakeip"
       },
       {
         "tag": "dnspod",
@@ -24,41 +22,49 @@
       },
       {
         "tag": "rcode",
-        "address": "rcode://name_error",
-        "detour": "direct"
+        "address": "rcode://name_error"
       }
     ],
     "rules": [
       {
         "domain_suffix": [
-          "节点域名"
-        ],
-        "domain_keyword": [
-          "ntp"
-        ],
-        "domain_regex": [
-          "(^|\\.)(alt[1-8]-mtalk|mtalk|mtalk4)\\.google\\.com$"
+          "节点二级域名",
+
+          "订阅二级域名"
         ],
         "server": "dnspod",
-        "disable_cache": false
+        "disable_cache": true
       },
       {
         "geosite": "category-ads-all",
-        "server": "rcode",
-        "disable_cache": true
+        "server": "rcode"
+      },
+      {
+        "geosite": [
+          "geolocation-!cn",
+          "microsoft",
+          "google"
+        ],
+        "server": "cloudflare"
+//        "server": "fakedns"
       },
       {
         "geosite": [
           "cn",
-          "microsoft@cn",
           "apple@cn",
           "category-games@cn"
         ],
         "server": "dnspod"
       }
     ],
+    "fakeip": {
+      "enabled": true,
+      "inet4_range": "198.18.0.0/15",
+      "inet6_range": "fc00::/18"
+    },
     "strategy": "prefer_ipv4",
-    "final": "google"
+    "final": "cloudflare"
+//    "final": "fakedns"
   },
   "inbounds": [
     {
@@ -67,43 +73,64 @@
       "listen": "::",
       "listen_port": 1080,
       "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4",
-      "set_system_proxy": false
-    },
+      "domain_strategy": "prefer_ipv4"
+//      "set_system_proxy": false
+//    },
 //    {
 //      "type": "tun",
 //      "tag": "tun-in",
-//      "interface_name": "tun0",
+//      "interface_name": "tun3",
 //      "inet4_address": "172.19.0.1/30",
 //      "inet6_address": "fdfe:dcba:9876::1/126",
 //      "stack": "system",
-//      "auto_route": false,
+//      "auto_route": true,
 //      "strict_route": false,
-//      "sniff": true,
-//      "sniff_override_destination": true,
-//      "domain_strategy": "prefer_ipv4"
+//      "sniff": true
 //    },
+//    {
+//      "type": "redirect",
+//      "tag": "redirect-in",
+//      "listen": "::",
+//      "listen_port": 7891,
+//      "sniff": true
+    },
     {
       "type": "tproxy",
       "tag": "tproxy-in",
-//      "network": "udp",
       "listen": "::",
       "listen_port": 1536,
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4"
-    },
-    {
-      "type": "redirect",
-      "tag": "redirect-in",
-      "listen": "::",
-      "listen_port": 7891,
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4"
+      "sniff": true
     }
   ],
+// proviedrs 需要使用 https://github.com/qjebbs/sing-box
+//
+//  "providers": [
+//    {
+//      "tag": "provider1",
+//      "url": "base64 订阅链接1",
+//      "interval": "24h",
+//      "cache_file": "provider1.txt",
+//      "download_detour": "direct"
+//    },
+//    {
+//      "tag": "provider2",
+//      "url": "base64 订阅链接2",
+//      "interval": "18h",
+//      "cache_file": "provider2.txt",
+//      "download_detour": "direct",
+//
+//      "exclude": "官网|剩余|到期|流量"
+//    },
+//    {
+//      "tag": "provider3",
+//      "url": "base64 订阅链接3",
+//      "interval": "12h",
+//      "cache_file": "provider3.txt",
+//      "download_detour": "direct",
+//
+//      "include": "IEPL|专线"
+//    }
+//  ],
   "outbounds": [
     {
       "type": "direct",
@@ -118,41 +145,23 @@
       "tag": "dns-out"
     },
     {
-      "type": "socks",
-      "tag": "socks-out",
-      "server": "127.0.0.1",
-      "server_port": 7890
-    },
-    {
       "type": "selector",
       "tag": "Proxy",
+//      "providers": [
+//        "provider1",
+//        "provider2",
+//        "provider3"
+//      ],
       "outbounds": [
-        "socks-out"
+        "direct"
       ]
     }
   ],
   "route": {
-    "geoip": {
-      "download_url": "",
-      "download_detour": "Proxy"
-    },
-    "geosite": {
-      "download_url": "",
-      "download_detour": "Proxy"
-    },
     "rules": [
       {
-        "protocol": "dns",
+        "port": 53,
         "outbound": "dns-out"
-      },
-      {
-        "port": [
-          123
-        ],
-        "port_range": [
-          "5228:5230"
-        ],
-        "outbound": "direct"
       },
       {
         "geosite": "category-ads-all",
@@ -160,7 +169,6 @@
       },
       {
         "geosite": [
-          "microsoft@cn",
           "apple@cn",
           "category-games@cn"
         ],
@@ -168,7 +176,9 @@
       },
       {
         "geosite": [
-          "geolocation-!cn"
+          "geolocation-!cn",
+          "microsoft",
+          "google"
         ],
         "outbound": "Proxy"
       },
@@ -194,8 +204,10 @@
   "experimental": {
     "clash_api": {
       "external_controller": "127.0.0.1:9998",
-      "external_ui": "dashboard",
-      "store_selected": true
+//      "secret": "singbox",
+//      "external_ui": "dashboard",
+      "store_selected": true,
+      "store_fakeip": true
     }
   }
 }
