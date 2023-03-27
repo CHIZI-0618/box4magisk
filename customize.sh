@@ -36,7 +36,7 @@ fi
 mkdir -p /data/adb/ksu/box/bin/
 mkdir -p /data/adb/ksu/box/run/
 
-cp -r -f $MODPATH/box4KSU_service.sh /data/adb/ksu/service.d/
+cp -f $MODPATH/box4KSU_service.sh /data/adb/ksu/service.d/
 mv -f $MODPATH/box4KSU_service.sh /data/adb/service.d/
 
 rm -f customize.sh
