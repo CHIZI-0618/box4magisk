@@ -1,5 +1,9 @@
 ## box4magisk 更新日志
 
+### v4.5
+- 添加 Box 内核 CPU 使用率显示
+- 添加 KernelSU 安装支持
+
 ### v4.4
 - 修复因包名重复导致的 UID 错误
 - 修复白名单 clash DNS 流量重定向
