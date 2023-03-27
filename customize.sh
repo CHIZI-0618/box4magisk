@@ -3,12 +3,20 @@
 SKIPUNZIP=1
 ASH_STANDALONE=1
 
-if [ $BOOTMODE ! = true ] ; then
+if [ "$BOOTMODE" ! = true ] ; then
   abort "Error: Please install in Magisk Manager or KernelSU Manager"
+elif [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10670 ] ; then
+  abort "Error: Please update your KernelSU and KernelSU Manager or KernelSU Manager"
 fi
 
-if [ ! -d /data/adb/service.d ] ; then
-  mkdir -p /data/adb/service.d
+if [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10683 ] ; then
+  service_dir="/data/adb/ksu/service.d"
+else 
+  service_dir="/data/adb/service.d"
+fi
+
+if [ ! -d "$service_dir" ] ; then
+    mkdir -p $service_dir
 fi
 
 unzip -qo "${ZIPFILE}" -x 'META-INF/*' -d $MODPATH
@@ -31,14 +39,14 @@ else
   mv $MODPATH/box /data/adb/
 fi
 
-if [ $KSU = true ] ; then
+if [ "$KSU" = true ] ; then
   sed -i 's/name=box4magisk/name=box4KernelSU/g' $MODPATH/module.prop
 fi
 
 mkdir -p /data/adb/box/bin/
 mkdir -p /data/adb/box/run/
 
-mv -f $MODPATH/box4_service.sh /data/adb/service.d/
+mv -f $MODPATH/box4_service.sh $service_dir/
 
 rm -f customize.sh
 
@@ -47,7 +55,7 @@ set_perm_recursive /data/adb/box/ 0 0 0755 0644
 set_perm_recursive /data/adb/box/scripts/ 0 0 0755 0700
 set_perm_recursive /data/adb/box/bin/ 0 0 0755 0700
 
-set_perm /data/adb/service.d/box4_service.sh 0 0 0700
+set_perm $service_dir/box4_service.sh 0 0 0700
 
 # fix "set_perm_recursive /data/adb/box/scripts" not working on some phones.
 chmod ugo+x /data/adb/box/scripts/*
