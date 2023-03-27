@@ -9,6 +9,8 @@ fi
 
 if [ ! -d /data/adb/ksu/service.d ] ; then
   mkdir -p /data/adb/ksu/service.d
+if [ ! -d /data/adb/service.d ] ; then
+  mkdir -p /data/adb/service.d
 fi
 
 unzip -qo "${ZIPFILE}" -x 'META-INF/*' -d $MODPATH
@@ -34,7 +36,8 @@ fi
 mkdir -p /data/adb/ksu/box/bin/
 mkdir -p /data/adb/ksu/box/run/
 
-mv -f $MODPATH/box4KSU_service.sh /data/adb/ksu/service.d/
+cp -r -f $MODPATH/box4KSU_service.sh /data/adb/ksu/service.d/
+mv -f $MODPATH/box4KSU_service.sh /data/adb/service.d/
 
 rm -f customize.sh
 
@@ -44,6 +47,7 @@ set_perm_recursive /data/adb/ksu/box/scripts/ 0 0 0755 0700
 set_perm_recursive /data/adb/ksu/box/bin/ 0 0 0755 0700
 
 set_perm /data/adb/ksu/service.d/box4KSU_service.sh 0 0 0700
+set_perm /data/adb/service.d/box4KSU_service.sh 0 0 0700
 
 #fix "set_perm_recursive /data/adb/ksu/box/scripts" not working on some phones. It didn't work on my Oneplus 7 pro and Remi K50.
 chmod ugo+x /data/adb/ksu/box/scripts/*

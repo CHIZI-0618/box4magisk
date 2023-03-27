@@ -131,7 +131,7 @@
 
 ## 卸载
 
-- 从 KernelSU Manager 应用卸载本模块，会删除 `/data/adb/ksu/service.d/box4KSU_service.sh`，保留 Box 数据目录 `/data/adb/ksu/box`
+- 从 KernelSU Manager 应用卸载本模块，会删除 `/data/adb/service.d/box4KSU_service.sh` 和 `/data/adb/ksu/service.d/box4KSU_service.sh`，保留 Box 数据目录 `/data/adb/ksu/box`
 - 可使用命令清除 Box 数据：`rm -rf /data/adb/ksu/box`
 
 ## 更新日志
