@@ -6,7 +6,7 @@ ASH_STANDALONE=1
 if [ $BOOTMODE ! = true ] ; then
   abort "Error: Please install in Magisk Manager or KernelSU Manager"
 elif [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10670 ]; then
-  abort "Error: Please update your KernelSU and KernelSU Manager"
+  abort "Error: Please update your KernelSU and KernelSU Manager or KernelSU Manager"
 fi
 
 if [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10683 ]; then
@@ -43,6 +43,10 @@ if [ "$KSU" = true ] ; then
   sed -i 's/name=box4magisk/name=box4KernelSU/g' $MODPATH/module.prop
 fi
 
+if [ $KSU = true ] ; then
+  sed -i 's/name=box4magisk/name=box4KernelSU/g' $MODPATH/module.prop
+fi
+
 mkdir -p /data/adb/box/bin/
 mkdir -p /data/adb/box/run/
 
@@ -65,6 +69,7 @@ else
   set_perm /data/adb/service.d/box4_service.sh 0 0 0700
 fi
 
+# fix "set_perm_recursive /data/adb/box/scripts" not working on some phones.
 # fix "set_perm_recursive /data/adb/box/scripts" not working on some phones.
 chmod ugo+x /data/adb/box/scripts/*
 
