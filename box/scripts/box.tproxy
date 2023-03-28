@@ -1,8 +1,6 @@
 #!/system/bin/sh
 
-magisk_path=$(magisk --path 2>> /dev/null)
-export PATH=${magisk_path}/.magisk/busybox:$PATH:/data/data/com.termux/files/usr/bin
-busybox_path="/data/adb/ksu/bin/busybox"
+export PATH="/data/adb/magisk:/data/adb/ksu/bin:$PATH:/data/data/com.termux/files/usr/bin"
 
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
@@ -40,7 +38,7 @@ find_packages_uid() {
 }
 
 probe_user_group() {
-  if bin_pid=$(${busybox_path} pidof ${bin_name}) ; then
+  if bin_pid=$(busybox pidof ${bin_name}) ; then
     box_user=$(stat -c %U /proc/${bin_pid})
     box_group=$(stat -c %G /proc/${bin_pid})
     return 0
