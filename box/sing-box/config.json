@@ -26,27 +26,15 @@
       }
     ],
     "rules": [
+      // 见 https://github.com/SagerNet/sing-box/releases/tag/v1.2.2
       {
-        "domain_suffix": [
-          "节点二级域名",
-
-          "订阅二级域名"
-        ],
+        "outbound": "any",
         "server": "dnspod",
         "disable_cache": true
       },
       {
         "geosite": "category-ads-all",
         "server": "rcode"
-      },
-      {
-        "geosite": [
-          "geolocation-!cn",
-          "microsoft",
-          "google"
-        ],
-        "server": "cloudflare"
-//        "server": "fakedns"
       },
       {
         "geosite": [
@@ -75,7 +63,7 @@
       "sniff": true,
       "domain_strategy": "prefer_ipv4"
 //      "set_system_proxy": false
-//    },
+    },
 //    {
 //      "type": "tun",
 //      "tag": "tun-in",
@@ -84,7 +72,7 @@
 //      "inet6_address": "fdfe:dcba:9876::1/126",
 //      "stack": "system",
 //      "auto_route": true,
-//      "strict_route": false,
+//      "strict_route": true,
 //      "sniff": true
 //    },
 //    {
@@ -93,7 +81,7 @@
 //      "listen": "::",
 //      "listen_port": 7891,
 //      "sniff": true
-    },
+//    },
     {
       "type": "tproxy",
       "tag": "tproxy-in",
@@ -170,20 +158,7 @@
       {
         "geosite": [
           "apple@cn",
-          "category-games@cn"
-        ],
-        "outbound": "direct"
-      },
-      {
-        "geosite": [
-          "geolocation-!cn",
-          "microsoft",
-          "google"
-        ],
-        "outbound": "Proxy"
-      },
-      {
-        "geosite": [
+          "category-games@cn",
           "cn"
         ],
         "outbound": "direct"

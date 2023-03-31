@@ -58,7 +58,7 @@ dns:
   nameserver:
     - 'https://8.8.8.8/dns-query#dns'
     - 'https://1.1.1.1/dns-query#dns'
-  proxy-server-naneserver:
+  proxy-server-nameserver:
     - https://doh.pub/dns-query
   nameserver-policy:
     "geosite:cn,private":
