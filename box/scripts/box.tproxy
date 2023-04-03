@@ -108,7 +108,7 @@ start_redirect() {
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
     # Route apps to Box
-    for appid in ${appid_list[@]} ; do
+    for appid in ${uid_list[@]} ; do
       ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j REDIRECT --to-ports ${redir_port}
     done
     ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
@@ -159,8 +159,8 @@ start_tproxy() {
   # Bypass other if
   # Notice: Some interface is named with r_ / oem / nm_ / qcom_
   # It might need more complicated solution.
-  ${iptables} -t mangle -I BOX_EXTERNAL -i rmnet_data+ -j RETURN
-  ${iptables} -t mangle -I BOX_EXTERNAL -i ccmni+ -j RETURN
+  # ${iptables} -t mangle -I BOX_EXTERNAL -i rmnet_data+ -j RETURN
+  # ${iptables} -t mangle -I BOX_EXTERNAL -i ccmni+ -j RETURN
 
   # Bypass intranet
   # ${iptables} -t mangle -A BOX_EXTERNAL -m addrtype --dst-type LOCAL -j RETURN
@@ -273,7 +273,7 @@ start_tproxy() {
     fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
     # Route apps to Box
-    for appid in ${appid_list[@]} ; do
+    for appid in ${uid_list[@]} ; do
       ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
       ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
     done
