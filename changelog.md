@@ -1,8 +1,18 @@
 ## box4magisk 更新日志
 
+### v4.6
+- 修复白名单未生效的错误
+- 修复 Magisk 控制启停时黑白名单未获取的错误
+- 更新部分核心示例配置
+  - 修复 Clash.Meta 配置中的拼写错误
+  - sing-box 使用 any 出站规则匹配出站服务器域名解析
+
 ### v4.5
-- 添加 Box 内核 CPU 使用率显示
+- 添加 Box 核心 CPU 使用率显示
 - 添加 KernelSU 安装支持
+- 更新部分核心示例配置
+  - Clash.Meta 的 DNS / 策略组配置
+  - sing-box 的 fakedns / Proxy Providers 配置
 
 ### v4.4
 - 修复因包名重复导致的 UID 错误

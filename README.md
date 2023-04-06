@@ -1,4 +1,4 @@
-# Box4Magisk
+# Box4Magisk/KernelSU
 
 本项目为 clash、sing-box、v2ray、xray 的 [Magisk](https://github.com/topjohnwu/Magisk) 与 [KernelSU](https://github.com/tiann/KernelSU) 模块。支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持 TUN（TCP + UDP），亦可 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
 
