@@ -33,7 +33,7 @@ find_packages_uid() {
   for user_package in ${user_packages_list[@]} ; do
     user=$(echo ${user_package} | awk -F ':' '{print $1}')
     package=$(echo ${user_package} | awk -F ':' '{print $2}')
-    uid_list[${#uid_list[@]}]=$(pm list packages -U --user ${user} ${package} | awk -F 'uid:' '{print $2}')
+    uid_list[${#uid_list[@]}]=$((${user}*100000+$(cat /data/system/packages.list | grep ${package} | awk '{print $2}')))
   done
 }
 
