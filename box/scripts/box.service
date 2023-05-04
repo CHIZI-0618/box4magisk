@@ -108,6 +108,7 @@ start_bin() {
       fi
       ;;
     xray)
+      export XRAY_LOCATION_ASSET="${box_path}/${bin_name}"
       if ${bin_path} -test -confdir ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
         nohup busybox setuidgid ${box_user_group} ${bin_path} -confdir ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
@@ -119,6 +120,7 @@ start_bin() {
       fi
       ;;
     v2ray)
+      export V2RAY_LOCATION_ASSET="${box_path}/${bin_name}"
       if ${bin_path} test -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
         nohup busybox setuidgid ${box_user_group} ${bin_path} run -d ${box_path}/${bin_name} > /dev/null 2> ${run_path}/error_${bin_name}.log &
