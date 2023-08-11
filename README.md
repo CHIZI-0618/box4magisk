@@ -48,7 +48,7 @@
 
 - 如果您希望 Box 代理所有应用程序（APP），除了某些特定的应用，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `blacklist`（默认值），在 `user_packages_list` 数组中添加元素，数组元素格式为`安卓用户:应用包名`，元素之间用空格隔开。即可**不代理**相应安卓用户应用。例如 `user_packages_list=("0:com.android.captiveportallogin" "10:com.tencent.mm")` 代表不代理用户 0 的 CaptivePortalLogin 和用户 10 的 Wechat
 
-- 如果您希望只对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `user_packages_list` 数组中添加元素，数组元素格式为`安卓用户:应用包名`，元素之间用空格隔开。即可**代理**相应安卓用户应用。例如 `user_packages_list=("0:com.termux" "10:org.telegram.messenger")` 代表代理用户 0 的 Termux 和用户 10 的 Telegram
+- 如果您希望只对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `user_packages_list` 数组中添加元素，数组元素格式为`安卓用户:应用包名`，元素之间用空格隔开。即可**仅代理**相应安卓用户应用。例如 `user_packages_list=("0:com.termux" "10:org.telegram.messenger")` 代表代理用户 0 的 Termux 和用户 10 的 Telegram
 
 - `proxy_mode` 的值为 `core` 时，透明代理不会工作，**仅仅**启动相应核心，这可以用来支持部分核心（sing-box、clash）原生的 TUN 入站
 
@@ -73,6 +73,16 @@
 - 打开 `/data/adb/box/scripts/box.config` 文件，修改 `ignore_out_list` 数组添加 `wlan+` 元素则透明代理绕过 WLAN，热点不受影响
 
 - 打开 `/data/adb/box/scripts/box.config` 文件，修改 `ap_list` 数组删除 `wlan+` 元素则不透明代理热点（联发科机型可能为 `ap+` 而非 `wlan+`，可使用 ifconfig 命令查看）
+
+#### 特定进程的透明代理
+
+- Box 默认透明代理所有进程
+
+- 如果您希望 Box 代理所有进程，除了某些特定的进程，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `blacklist`（默认值），在 `gid_list` 数组中添加 GID 元素，GID 之间用空格隔开。即可**不代理**相应 GID 的进程
+
+- 如果您希望只对特定的进程进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `gid_list` 数组中添加 GID 元素，GID 之间用空格隔开。即可**仅代理**相应 GID 进程
+
+> 小贴士：因为安卓 iptables 不支持 PID 扩展匹配，所以 Box 匹配进程是通过匹配 GID 间接达到的。安卓可以使用 busybox setuidgid 命令使用特定 UID 任意 GID 启动特定进程
 
 #### 进入手动模式
 

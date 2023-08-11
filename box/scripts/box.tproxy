@@ -106,14 +106,30 @@ start_redirect() {
       ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
       log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} no transparent proxy."
     fi
+    if [ "${gid_list}" != "" ] ; then
+      # Bypass gids
+      for gid in ${gid_list[@]} ; do
+        ${iptables} -t nat -I BOX_LOCAL -m owner --gid-owner ${gid} -j RETURN
+      done
+      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} no transparent proxy."
+    fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
-    # Route apps to Box
-    for appid in ${uid_list[@]} ; do
-      ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j REDIRECT --to-ports ${redir_port}
-    done
-    ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
-    ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}
-    log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
+    if [ "${uid_list}" != "" ] ; then
+      # Route apps to Box
+      for appid in ${uid_list[@]} ; do
+        ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j REDIRECT --to-ports ${redir_port}
+      done
+      ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
+      ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}
+      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
+    fi
+    if [ "${gid_list}" != "" ] ; then
+      # Route gids to Box
+      for gid in ${gid_list[@]} ; do
+        ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --gid-owner ${gid} -j REDIRECT --to-ports ${redir_port}
+      done
+      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} transparent proxy."
+    fi
   else
     log Warn "proxy mode: ${proxy_mode} error."
     # Route Everything
@@ -271,20 +287,37 @@ start_tproxy() {
       ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark ${id}
       log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} no transparent proxy."
     fi
+    if [ "${gid_list}" != "" ] ; then
+      # Bypass gids
+      for gid in ${gid_list[@]} ; do
+        ${iptables} -t mangle -I BOX_LOCAL -m owner --gid-owner ${gid} -j RETURN
+      done
+      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} no transparent proxy."
+    fi
   elif [ "${proxy_mode}" = "whitelist" ] ; then
-    # Route apps to Box
-    for appid in ${uid_list[@]} ; do
-      ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
-      ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
-    done
-    ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j MARK --set-mark ${id}
-    ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 0 -j MARK --set-mark ${id}
-    # Route dnsmasq to Box
-    ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
-    ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
-    # Route DNS request to Box
-    [ "${bin_name}" != "clash" ] && ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j MARK --set-mark ${id}
-    log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
+    if [ "${uid_list}" != "" ] ; then
+      # Route apps to Box
+      for appid in ${uid_list[@]} ; do
+        ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
+        ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner ${appid} -j MARK --set-mark ${id}
+      done
+      ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j MARK --set-mark ${id}
+      ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 0 -j MARK --set-mark ${id}
+      # Route dnsmasq to Box
+      ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
+      ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-mark ${id}
+      # Route DNS request to Box
+      [ "${bin_name}" != "clash" ] && ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j MARK --set-mark ${id}
+      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
+    fi
+    if [ "${gid_list}" != "" ] ; then
+      # Route gids to Box
+      for gid in ${gid_list[@]} ; do
+        ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --gid-owner ${gid} -j MARK --set-mark ${id}
+        ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --gid-owner ${gid} -j MARK --set-mark ${id}
+      done
+      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} transparent proxy."
+    fi
   else
     log Warn "proxy mode: ${proxy_mode} error."
     # Route Everything
