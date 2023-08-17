@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
   push:
     paths-ignore:
-      - '.github'
-      - 'README.md'
+      - ".github"
+      - "README.md"
+    tags-ignore:
+      - "v*"
 
 jobs:
   build:
@@ -18,7 +20,7 @@ jobs:
         run: sh build.sh
 
       - name: Delete current prerelease assets
-        uses: andreaswilli/delete-release-assets-action@v2.0.0
+        uses: andreaswilli/delete-release-assets-action@v3.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: Prerelease
