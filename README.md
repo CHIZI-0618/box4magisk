@@ -8,7 +8,7 @@
 
 **请确保您的配置文件不会造成流量回环，否则可能会导致您的手机无限重启。**
 
-如果你真的不知道如何配置这个模块，你可能需要像 ClashForAndroid、v2rayNG、surfboard、SagerNet、AnXray 等应用程序。
+如果你真的不知道如何配置这个模块，你可能需要像 ClashForAndroid、sing-box for Android、v2rayNG、surfboard、SagerNet、AnXray 等应用程序。
 
 
 ## 安装
@@ -19,7 +19,7 @@
 
 ### 注意
 
-模块不包含 [clash](https://github.com/Dreamacro/clash)、[clash.meta](https://github.com/MetaCubeX/Clash.Meta)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core) 等二进制可执行文件。
+模块不包含 [clash](https://github.com/Dreamacro/clash)、[mihomo](https://github.com/MetaCubeX/mihomo)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core) 等二进制可执行文件。
   
 模块安装完成后请您自行下载设备对应架构的核心文件放置到 `/data/adb/box/bin/` 目录。
 
