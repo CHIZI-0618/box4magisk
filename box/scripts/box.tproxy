@@ -367,12 +367,14 @@ start_tproxy() {
     ${iptables} -t nat -A CLASH_DNS_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
 
     ${iptables} -t nat -I OUTPUT -j CLASH_DNS_LOCAL
-
-    # Fix ICMP (ping), this does not guarantee that the ping result is valid (proxies such as clash do not support forwarding ICMP), 
-    # just that it returns a result, "--to-destination" can be set to a reachable address.
-    ${iptables} -t nat -I OUTPUT -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
-    ${iptables} -t nat -I PREROUTING -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
   fi
+
+  # Fix ICMP (ping), this does not guarantee that the ping result is valid (proxies such as clash do not support forwarding ICMP),
+  # just that it returns a result, "--to-destination" can be set to a reachable address
+  iptables -w 100 -t nat -A OUTPUT -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
+  iptables -w 100 -t nat -A PREROUTING -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
+  # ip6tables -w 100 -t nat -A OUTPUT -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
+  # ip6tables -w 100 -t nat -A PREROUTING -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
 }
 
 stop_tproxy() {
@@ -420,8 +422,10 @@ stop_tproxy() {
   ${iptables} -t nat -F CLASH_DNS_LOCAL
   ${iptables} -t nat -X CLASH_DNS_LOCAL
 
-  ${iptables} -t nat -D OUTPUT -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
-  ${iptables} -t nat -D PREROUTING -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
+  iptables -t nat -D OUTPUT -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
+  iptables -t nat -D PREROUTING -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
+  # ip6tables -t nat -D OUTPUT -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
+  # ip6tables -t nat -D PREROUTING -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
 }
 
 disable_ipv6() {
