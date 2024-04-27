@@ -63,10 +63,10 @@ check_permission() {
     (box_user_group="root:net_admin" && log Error "${box_user_group} error, use root:net_admin instead.")
     bin_path=$(which ${bin_name})
     chown ${box_user_group} ${bin_path}
-    chmod 0700 ${bin_path}
+    chmod 0755 ${bin_path}
     if [ "${box_user_id}" != "0" ] || [ "${box_group_id}" != "3005" ] ; then
       # setcap has been deprecated as it does not support binary outside of the /system/bin directory
-      setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service+ep' ${bin_path} || \
+      setcap 'cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_ptrace,cap_dac_read_search+ep' ${bin_path} || \
       (box_user_group="root:net_admin" && log Error "setcap authorization failed, you may need libcap package.")
     fi
     chown -R ${box_user_group} ${box_path}

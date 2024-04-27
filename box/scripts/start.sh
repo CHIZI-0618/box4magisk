@@ -18,6 +18,10 @@ wait_until_login(){
     sleep 1
   done
   rm "$test_file"
+
+  while [ ! -f "/data/system/packages.xml" ] ; do
+    sleep 1
+  done
 }
 
 wait_until_login
