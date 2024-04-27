@@ -181,6 +181,12 @@ start_tproxy() {
   # ${iptables} -t mangle -I BOX_EXTERNAL -i rmnet_data+ -j RETURN
   # ${iptables} -t mangle -I BOX_EXTERNAL -i ccmni+ -j RETURN
 
+  # Skip traffic already handled by TProxy
+  # If the interface of the default route has a public IPv4 or IPv6 address assigned by the ISP, omitting these rules will result in abnormal proxy behavior for local traffic, which may cause the entire network to run slower
+  ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -m socket --transparent -j MARK --set-mark ${id}
+  ${iptables} -t mangle -A BOX_EXTERNAL -p udp -m socket --transparent -j MARK --set-mark ${id}
+  ${iptables} -t mangle -A BOX_EXTERNAL -m socket -j RETURN
+
   # Bypass intranet
   # ${iptables} -t mangle -A BOX_EXTERNAL -m addrtype --dst-type LOCAL -j RETURN
   # Run `su -c 'zcat /proc/config.gz | grep -i addrtype'` to check compatibility
@@ -332,13 +338,13 @@ start_tproxy() {
   ${iptables} -t mangle -I OUTPUT -j BOX_LOCAL
 
 
-  ${iptables} -t mangle -N DIVERT
-  ${iptables} -t mangle -F DIVERT
+  # ${iptables} -t mangle -N DIVERT
+  # ${iptables} -t mangle -F DIVERT
 
-  ${iptables} -t mangle -A DIVERT -j MARK --set-mark ${id}
-  ${iptables} -t mangle -A DIVERT -j ACCEPT
+  # ${iptables} -t mangle -A DIVERT -j MARK --set-mark ${id}
+  # ${iptables} -t mangle -A DIVERT -j ACCEPT
 
-  ${iptables} -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
+  # ${iptables} -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
 
 
   # This rule blocks local access to tproxy-port to prevent traffic loopback.
