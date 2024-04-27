@@ -1,5 +1,11 @@
 ## box4magisk 更新日志
 
+### v4.8
+- 修复 APP 不存在时 UID 计算错误
+- 修复 fakeip ICMP
+- 修复进程/包名嗅探
+- 修复本机公网透明代理回环
+
 ### v4.7
 - 修复 APP 黑白名单匹配与 UID 计算
 - 修复 v2fly/xray 核心 geo* 文件位置错误
