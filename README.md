@@ -1,6 +1,6 @@
 # Box4Magisk/KernelSU/APatch
 
-本项目通过 [Magisk](https://github.com/topjohnwu/Magisk) 、[KernelSU](https://github.com/tiann/KernelSU) 或 [APatch](https://github.com/bmax121/APatch) 部署 clash、mihomo、sing-box、v2ray、xray 代理，支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持由核心提供的 TUN（TCP + UDP）代理，也支持 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
+本项目通过 [Magisk](https://github.com/topjohnwu/Magisk) 、[KernelSU](https://github.com/tiann/KernelSU) 或 [APatch](https://github.com/bmax121/APatch) 部署 clash、mihomo、sing-box、v2ray、xray、hysteria 代理，支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持由核心提供的 TUN（TCP + UDP）代理，也支持 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
 
 ## 免责声明
 
@@ -19,7 +19,7 @@
 
 ### 注意
 
-模块不包含 [clash](https://github.com/Dreamacro/clash)、[mihomo](https://github.com/MetaCubeX/mihomo)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core) 等二进制可执行文件。
+模块不包含 [clash](https://github.com/Dreamacro/clash)、[mihomo](https://github.com/MetaCubeX/mihomo)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core)、[Hysteria](https://github.com/apernet/hysteria) 等二进制可执行文件。
   
 模块安装完成后请您自行下载设备对应架构的核心文件放置到 `/data/adb/box/bin/` 目录。
 
@@ -28,7 +28,7 @@
 
 - 各核心工作在 `/data/adb/box/核心名字` 目录，核心名字由 `/data/adb/box/scripts/box.config` 文件中 `bin_name` 定义，有效值只有 `clash`、`mihomo`、`xray`、`v2ray`、`sing-box`，`bin_name` **决定模块启用的核心**
 - 各核心配置文件需用户自定义，模块脚本会检查配置合法性，检查结果存储在 `/data/adb/box/run/check.log` 文件中
-- 提示：`mihomo` 和 `sing-box` 核心自带默认配置已做好配合透明代理脚本工作的准备。建议编辑 `proxy-providers` 或 `outbounds` 部分来添加您的代理服务器，进阶配置请参考相应官方文档。地址：[clash 文档](https://github.com/Dreamacro/clash/wiki/configuration)，[mihomo 文档](https://wiki.metacubex.one)，[sing-box 文档](https://sing-box.sagernet.org/)，[v2ray 文档](https://www.v2fly.org/)，[xray 文档](https://xtls.github.io/)
+- 提示：`mihomo` 和 `sing-box` 核心自带默认配置已做好配合透明代理脚本工作的准备。建议编辑 `proxy-providers` 或 `outbounds` 部分来添加您的代理服务器，进阶配置请参考相应官方文档。地址：[clash 文档](https://github.com/Dreamacro/clash/wiki/configuration)，[mihomo 文档](https://wiki.metacubex.one)，[sing-box 文档](https://sing-box.sagernet.org/)，[v2ray 文档](https://www.v2fly.org/)，[xray 文档](https://xtls.github.io/)，[Hysteria 文档](https://v2.hysteria.network/)
 
 
 ## 使用方法

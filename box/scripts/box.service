@@ -51,6 +51,8 @@ forward() {
   iptables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
   ip6tables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
   ip6tables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
+  echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter=2
+  echo 2 > /proc/sys/net/ipv4/conf/all/rp_filter=2
 }
 
 check_permission() {
@@ -130,6 +132,12 @@ start_bin() {
         log Error "configuration check failed, please check the ${run_path}/check.log file."
         return 1
       fi
+      ;;
+    hysteria)
+      log Info "starting ${bin_name} service."
+      nohup busybox setuidgid ${box_user_group} ${bin_path} -c ${box_path}/${bin_name}/config.yaml > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
+      echo -n $! > ${pid_file}
+      return 0
       ;;
     *)
       log Error "$1 core error, it must be one of ${bin_name_list[*]}"
