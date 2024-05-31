@@ -188,7 +188,7 @@ start_tproxy() {
   ${iptables} -t mangle -A BOX_EXTERNAL -p udp -m socket --transparent -j MARK --set-xmark ${mark_id}
   ${iptables} -t mangle -A BOX_EXTERNAL -m socket -j RETURN
 
-  if [ "${bin_name}" = "clash" ] ; then
+  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "hysteria" ] ; then
     ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
   else
@@ -241,7 +241,7 @@ start_tproxy() {
     log Info "${ignore_out_list[*]} ignore transparent proxy."
   fi
 
-  if [ "${bin_name}" = "clash" ] ; then
+  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "hysteria" ] ; then
     ${iptables} -t mangle -A BOX_LOCAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j RETURN
   else
