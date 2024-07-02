@@ -37,24 +37,6 @@ log() {
   esac
 }
 
-create_tun_link() {
-  mkdir -p /dev/net
-  [ ! -L /dev/net/tun ] && ln -s /dev/tun /dev/net/tun
-}
-
-probe_tun_device() {
-  ifconfig | grep -q ${tun_device} || return 1
-}
-
-forward() {
-  iptables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
-  iptables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
-  ip6tables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
-  ip6tables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
-  echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter=2
-  echo 2 > /proc/sys/net/ipv4/conf/all/rp_filter=2
-}
-
 check_permission() {
   if which ${bin_name} | grep -q "/system/bin/" ; then
     box_user=$(echo ${box_user_group} | awk -F ':' '{print $1}')
@@ -186,15 +168,12 @@ display_bin_status() {
 start_service() {
   if check_permission ; then
     log Info "${bin_name} will be started with the ${box_user_group} user group."
-    [ "${proxy_method}" != "TPROXY" ] && create_tun_link
     if start_bin && wait_bin_listen ; then
       log Info "${bin_name} service is running. ( PID: $(cat ${pid_file}) )"
-      probe_tun_device && forward -I
       return 0
     else
       if bin_pid=$(pidof ${bin_name}) ; then
         log Warn "${bin_name} service is running but may not listening. ( PID: ${bin_pid} )"
-        probe_tun_device && forward -I
         return 0
       else
         log Error "start ${bin_name} service failed, please check the ${run_path}/error_${bin_name}.log file."
@@ -212,7 +191,6 @@ stop_service() {
   if display_bin_status ; then
     log Warn "stopping ${bin_name} service."
     kill $(cat ${pid_file}) || killall ${bin_name}
-    forward -D >> /dev/null 2>&1
     sleep 1
     display_bin_status
   fi
