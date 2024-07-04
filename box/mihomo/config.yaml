@@ -53,6 +53,7 @@ sniffer:
 tun:
   enable: false
   stack: system
+  device: tun0
   dns-hijack:
     - "any:53"
   auto-route: true
