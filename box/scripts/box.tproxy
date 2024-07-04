@@ -477,11 +477,13 @@ tun_forward_iptables_rules() {
   # iptables $1 FORWARD -s 192.168.0.0/16 -o ${tun_device} -j ACCEPT
   iptables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
   iptables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
+  ip6tables -w 100 $1 FORWARD -o ${tun_device} -j ACCEPT
+  ip6tables -w 100 $1 FORWARD -i ${tun_device} -j ACCEPT
   # iptables $1 PREROUTING -t nat ! -i ${tun_device} -s 10.0.0.0/8 -p udp --dport 53 -j DNAT --to 1.1.1.1
   # iptables $1 PREROUTING -t nat ! -i ${tun_device} -s 172.16.0.0/12 -p udp --dport 53 -j DNAT --to 1.1.1.1
   # iptables $1 PREROUTING -t nat ! -i ${tun_device} -s 192.168.0.0/16 -p udp --dport 53 -j DNAT --to 1.1.1.1
   ## iptables $1 PREROUTING -t nat ! -i ${tun_device} -p udp --dport 53 -j DNAT --to 1.1.1.1
-  ip6tables -w 100 $1 FORWARD -j REJECT --reject-with icmp6-no-route
+  ## ip6tables -w 100 $1 FORWARD -j REJECT --reject-with icmp6-no-route
 }
 
 tun_forward_enable() {
