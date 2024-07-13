@@ -26,7 +26,7 @@
 
 ## 配置
 
-- 各核心工作在 `/data/adb/box/核心名字` 目录，核心名字由 `/data/adb/box/scripts/box.config` 文件中 `bin_name` 定义，有效值只有 `clash`、`mihomo`、`xray`、`v2ray`、`sing-box`，`bin_name` **决定模块启用的核心**
+- 各核心工作在 `/data/adb/box/核心名字` 目录，核心名字由 `/data/adb/box/scripts/box.config` 文件中 `bin_name` 定义，有效值只有 `clash`、`mihomo`、`sing-box`、`xray`、`v2ray`、`hysteria`，`bin_name` **决定模块启用的核心**
 - 各核心配置文件需用户自定义，模块脚本会检查配置合法性，检查结果存储在 `/data/adb/box/run/check.log` 文件中
 - 提示：`mihomo` 和 `sing-box` 核心自带默认配置已做好配合透明代理脚本工作的准备。建议编辑 `proxy-providers` 或 `outbounds` 部分来添加您的代理服务器，进阶配置请参考相应官方文档。地址：[clash 文档](https://github.com/Dreamacro/clash/wiki/configuration)，[mihomo 文档](https://wiki.metacubex.one)，[sing-box 文档](https://sing-box.sagernet.org/)，[v2ray 文档](https://www.v2fly.org/)，[xray 文档](https://xtls.github.io/)，[Hysteria 文档](https://v2.hysteria.network/)
 
@@ -132,9 +132,9 @@
 
 - 修改各核心配置文件时请保证相关配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致
   
-- ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L14-L18)~~
+- ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L13-L17)~~
 
-- Box 服务初次启动时（或使用 box.tproxy renew 命令）会将本机 IP 加入绕过列表防止流量环路，但仍建议如本机存在**公网 IP** 地址请将 IP 添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中
+- Box 服务初次启动时（或使用 box.tproxy renew 命令）会将本机 IP 加入绕过列表防止流量环路，但仍建议如本机存在**公网 IP** 地址请将 IP 添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中，或许可尝试 [取消此三行注释](box/scripts/box.tproxy#L187-L189)
 
 - Box 服务的日志在 `/data/adb/box/run` 目录
 

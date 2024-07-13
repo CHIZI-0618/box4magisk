@@ -1,5 +1,13 @@
 ## box4magisk 更新日志
 
+### v4.9
+- 添加 APatch 支持(实验性)
+- 添加 Hysteria 核心支持
+- 添加 mihomo 独立于 clash 支持
+- 修复透明代理开机无网络
+- 修复部分核心 Tun 模式下的热点分享
+- 撤销本机公网透明代理防回环
+
 ### v4.8
 - 修复 APP 不存在时 UID 计算错误
 - 修复 fakeip ICMP
