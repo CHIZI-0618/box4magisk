@@ -448,7 +448,7 @@ case "$1" in
       return 1
     fi
     find_packages_uid
-    intranet[${#intranet[@]}]=$(ip address | grep -w inet | grep -v 127 | awk '{print $2}')
+    intranet[${#intranet[@]}]=$(ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1")
     if [ "${proxy_method}" = "TPROXY" ] ; then
       if (zcat /proc/config.gz | grep -q TPROXY) ; then
         log Info "use TPROXY:TCP+UDP."
@@ -459,7 +459,7 @@ case "$1" in
           log Debug "use IPv6."
           enable_ipv6
           iptables="ip6tables -w 100"
-          intranet6[${#intranet6[@]}]=$(ip address | grep -w inet6 | grep -v ::1 | grep -v fe80 | awk '{print $2}')
+          intranet6[${#intranet6[@]}]=$(ip -6 a | awk '/inet6/ {print $2}' | grep -vE "^fe80|^::1")
           start_tproxy && log Info "create ip6tables transparent proxy rules done." || (log Error "create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
         else
           disable_ipv6
@@ -504,7 +504,7 @@ case "$1" in
       return 1
     fi
     find_packages_uid
-    intranet[${#intranet[@]}]=$(ip address | grep -w inet | grep -v 127 | awk '{print $2}')
+    intranet[${#intranet[@]}]=$(ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1")
     if [ "${proxy_method}" = "TPROXY" ] ; then
       if (zcat /proc/config.gz | grep -q TPROXY) ; then
         log Info "use TPROXY:TCP+UDP."
@@ -515,7 +515,7 @@ case "$1" in
           log Debug "use IPv6."
           enable_ipv6
           iptables="ip6tables -w 100"
-          intranet6[${#intranet6[@]}]=$(ip address | grep -w inet6 | grep -v ::1 | grep -v fe80 | awk '{print $2}')
+          intranet6[${#intranet6[@]}]=$(ip -6 a | awk '/inet6/ {print $2}' | grep -vE "^fe80|^::1")
           start_tproxy && log Info "create ip6tables transparent proxy rules done." || (log Error "create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
         else
           disable_ipv6
