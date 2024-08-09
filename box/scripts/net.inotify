@@ -1,0 +1,29 @@
+#!/system/bin/sh
+
+events=$1
+# monitor_dir=$2
+# monitor_file=$3
+
+rules_add() {
+  ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1" | while read -r local_ipv4 ; do
+    if iptables -t mangle -nL BOX_LOCAL > /dev/null 2>&1 ; then
+      iptables -w 100 -t mangle -I BOX_EXTERNAL 3 -d $local_ipv4 -j RETURN
+      iptables -w 100 -t mangle -I BOX_LOCAL 4 -d $local_ipv4 -j RETURN
+    fi
+    if iptables -t nat -nL BOX_LOCAL > /dev/null 2>&1 ; then
+      iptables -w 100 -t nat -I BOX_EXTERNAL 3 -d $local_ipv4 -j RETURN
+      iptables -w 100 -t nat -I BOX_LOCAL 4 -d $local_ipv4 -j RETURN
+    fi
+  done
+
+  ip -6 a | awk '/inet6/ {print $2}' | grep -vE "^fe80|^::1" | while read -r local_ipv6 ; do
+    if ip6tables -t mangle -nL BOX_LOCAL > /dev/null 2>&1 ; then
+      ip6tables -w 100 -t mangle -I BOX_EXTERNAL 3 -d $local_ipv6 -j RETURN
+      ip6tables -w 100 -t mangle -I BOX_LOCAL 4 -d $local_ipv6 -j RETURN
+    fi
+  done
+}
+
+if [ $events = "w" ] ; then
+  rules_add
+fi

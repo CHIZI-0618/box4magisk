@@ -91,7 +91,7 @@ start_redirect() {
 
   if [ "${ignore_out_list}" != "" ] ; then
     for ignore in ${ignore_out_list[@]} ; do
-      ${iptables} -t nat -I BOX_LOCAL -o ${ignore} -j RETURN
+      ${iptables} -t nat -A BOX_LOCAL -o ${ignore} -j RETURN
     done
     log Info "${ignore_out_list[*]} ignore transparent proxy."
   fi
@@ -104,7 +104,7 @@ start_redirect() {
     else
       # Bypass apps
       for appid in ${uid_list[@]} ; do
-        ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner ${appid} -j RETURN
+        ${iptables} -t nat -A BOX_LOCAL -m owner --uid-owner ${appid} -j RETURN
       done
       # Allow !app
       ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
@@ -113,7 +113,7 @@ start_redirect() {
     if [ "${gid_list}" != "" ] ; then
       # Bypass gids
       for gid in ${gid_list[@]} ; do
-        ${iptables} -t nat -I BOX_LOCAL -m owner --gid-owner ${gid} -j RETURN
+        ${iptables} -t nat -A BOX_LOCAL -m owner --gid-owner ${gid} -j RETURN
       done
       log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} no transparent proxy."
     fi
