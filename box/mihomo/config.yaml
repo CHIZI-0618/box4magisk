@@ -1,5 +1,5 @@
 mixed-port: 7890
-tproxy-port: 7880
+tproxy-port: 1536
 ipv6: false
 allow-lan: true
 unified-delay: false
