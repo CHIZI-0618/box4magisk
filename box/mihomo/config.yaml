@@ -66,7 +66,8 @@ dns:
       - https://223.5.5.5/dns-query
 
 #这里是订阅更新和延迟测试相关
-p: &p {type: http, interval: 86400, header: {User-Agent: ["Clash.Meta/mihomo/Alpha/1.18.6"]}, health-check: {enable: true, url: https://cp.cloudflare.com, interval: 18000, lazy: true}}
+#可以更改 proxy 指定的出站
+p: &p {type: http, interval: 86400, proxy: DIRECT, header: {User-Agent: ["Clash.Meta/mihomo/Alpha/1.18.6"]}, health-check: {enable: true, url: https://cp.cloudflare.com, interval: 18000, lazy: true}}
 
 # url 里填写自己的订阅,名称不能重复
 proxy-providers:
