@@ -1,29 +1,94 @@
 #!/system/bin/sh
 
+scripts=$(realpath $0)
+scripts_dir=$(dirname ${scripts})
+
+source ${scripts_dir}/box.tproxy
+source ${scripts_dir}/box.config
+
+# check iptables_version
+  iptables_version=$(iptables --version | busybox awk '/^iptables/ {print $2}')
+  if busybox awk -v current_version="${iptables_version}" -v required_version="v1.6.1" 'BEGIN { exit !(current_version > required_version) }'; then
+    IPV="iptables -w 100"
+    IP6V="ip6tables -w 100"
+    else
+    IPV="iptables"
+    IP6V="ip6tables"
+  fi
+
 events=$1
 # monitor_dir=$2
 # monitor_file=$3
 
+FlexChain="CustomNet"
+# IPv4 network segment
+  SUBNET+=($(ip -4 a | busybox awk '/inet/ {print $2}' | busybox grep -vE "^127.0.0.1"))
+# IPv6 network segment
+  SUBNET6+=($(ip -6 a | busybox awk '/inet6/ {print $2}' | busybox grep -vE "^fe80|^::1|^fd00"))
+  
 rules_add() {
-  ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1" | while read -r local_ipv4 ; do
-    if ! iptables -t mangle -nL BOX_LOCAL | grep -q "$(echo $local_ipv4 | awk -F '.' '{print $1"."$2"."$3}')" > /dev/null 2>&1 ; then
-      iptables -w 100 -t mangle -I BOX_EXTERNAL 3 -d $local_ipv4 -j RETURN
-      iptables -w 100 -t mangle -I BOX_LOCAL 4 -d $local_ipv4 -j RETURN
-    fi
-    if ! iptables -t nat -nL BOX_LOCAL | grep -q $local_ipv4 > /dev/null 2>&1 ; then
-      iptables -w 100 -t nat -I BOX_EXTERNAL 3 -d $local_ipv4 -j RETURN
-      iptables -w 100 -t nat -I BOX_LOCAL 4 -d $local_ipv4 -j RETURN
-    fi
-  done
+  # Create custom chain
+  ${1} -t mangle -N ${2}_EXTERNAL
+  ${1} -t mangle -F ${2}_EXTERNAL
+  ${1} -t mangle -N ${2}_LOCAL
+  ${1} -t mangle -F ${2}_LOCAL
+  
+# Custom chains
+for subnet in ${3}; do
+  ${1} -t mangle -I ${2}_EXTERNAL 1 -p tcp -d ${subnet} -j RETURN
+  ${1} -t mangle -I ${2}_LOCAL 1 -p tcp -d ${subnet} -j RETURN
 
-  ip -6 a | awk '/inet6/ {print $2}' | grep -vE "^fe80|^::1" | while read -r local_ipv6 ; do
-    if ! ip6tables -t mangle -nL BOX_LOCAL | grep -q "$(echo $local_ipv6 | awk -F ':' '{print $1":"$2":"$3":"$4}')" > /dev/null 2>&1 ; then
-      ip6tables -w 100 -t mangle -I BOX_EXTERNAL 3 -d $local_ipv6 -j RETURN
-      ip6tables -w 100 -t mangle -I BOX_LOCAL 4 -d $local_ipv6 -j RETURN
-    fi
-  done
+  ${1} -t mangle -I ${2}_EXTERNAL 1 -p udp -d ${subnet} ! --dport 53 -j RETURN
+  ${1} -t mangle -I ${2}_LOCAL 1 -p udp -d ${subnet} ! --dport 53 -j RETURN
+
+  ${1} -t mangle -A ${2}_LOCAL -p udp -d ${subnet} --dport 53 -j MARK --set-mark ${mark_id}
+  ${1} -t mangle -A ${2}_EXTERNAL -p udp -d ${subnet} --dport 53 -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
+done
+  
+# Referencing custom chains
+  ${1} -t mangle -I PREROUTING 1 -j ${2}_EXTERNAL
+  ${1} -t mangle -I OUTPUT 2 -j ${2}_LOCAL
+}
+
+execute_rules_add() {
+  rules_add "${IPV}" "${FlexChain}" "${SUBNET[*]}"
+  if [ "${ipv6}" = enable ]; then
+  rules_add "${IP6V}" "${FlexChain}6" "${SUBNET6[*]}"
+  fi
+}
+
+delete_rules_add() {
+  # First, delete the reference chain, otherwise the custom chain cannot be deleted.
+  ${1} -t mangle -D PREROUTING -j ${2}_EXTERNAL
+  ${1} -t mangle -D OUTPUT -j ${2}_LOCAL
+  # Secondly, delete the custom rules of the custom chain.
+  ${1} -t mangle -F ${2}_EXTERNAL
+  ${1} -t mangle -F ${2}_LOCAL
+  # Finally, delete the custom chain.
+  ${1} -t mangle -X ${2}_EXTERNAL
+  ${1} -t mangle -X ${2}_LOCAL
+}
+
+# Function to execute delete proxy rules
+execute_delete_rules_add() {
+  delete_rules_add "${IPV}" "${FlexChain}"
+  if [ "${ipv6}" = enable ]; then
+    delete_rules_add "${IP6V}" "${FlexChain}6"
+  fi
 }
 
 if [ $events = "w" ] ; then
-  rules_add
+  date +"%Y-%m-%d %H:%M:%S" > /dev/null
+  while true; do
+    output=$(ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1")
+    if [ $(echo "$output" | wc -l) -ge 1 ]; then
+      echo "$output" > /dev/null
+      break
+    fi
+    sleep 1
+  done
+  execute_delete_rules_add
+  if pidof sing-box > /dev/null; then
+    execute_rules_add
+  fi
 fi
