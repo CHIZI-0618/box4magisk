@@ -188,7 +188,7 @@ start_tproxy() {
   # ${iptables} -t mangle -A BOX_EXTERNAL -p udp -m socket --transparent -j MARK --set-xmark ${mark_id}
   # ${iptables} -t mangle -A BOX_EXTERNAL -m socket -j RETURN
 
-  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "hysteria" ] ; then
+  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "hysteria" ] || [ "${mihome_dns_forward}" = "true" ] ; then
     ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
   else
@@ -241,7 +241,7 @@ start_tproxy() {
     log Info "${ignore_out_list[*]} ignore transparent proxy."
   fi
 
-  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "hysteria" ] ; then
+  if [ "${bin_name}" = "clash" ] || [ "${bin_name}" = "hysteria" ] || [ "${mihome_dns_forward}" = "true" ] ; then
     ${iptables} -t mangle -A BOX_LOCAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j RETURN
   else
@@ -337,24 +337,26 @@ start_tproxy() {
   fi
 
 
-  if [ "${bin_name}" = "clash" ] && [ "${iptables}" = "iptables -w 100" ] ; then
-    # android ip6tablses no nat table
-    ${iptables} -t nat -N CLASH_DNS_EXTERNAL
-    ${iptables} -t nat -F CLASH_DNS_EXTERNAL
+  if [ "${bin_name}" = "clash" ] || [ "${mihome_dns_forward}" = "true" ] ; then
+    if [ "${iptables}" = "iptables -w 100" ] ; then
+      # android ip6tablses no nat table
+      ${iptables} -t nat -N CLASH_DNS_EXTERNAL
+      ${iptables} -t nat -F CLASH_DNS_EXTERNAL
 
-    ${iptables} -t nat -A CLASH_DNS_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
+      ${iptables} -t nat -A CLASH_DNS_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
 
-    ${iptables} -t nat -I PREROUTING -j CLASH_DNS_EXTERNAL
+      ${iptables} -t nat -I PREROUTING -j CLASH_DNS_EXTERNAL
 
 
-    ${iptables} -t nat -N CLASH_DNS_LOCAL
-    ${iptables} -t nat -F CLASH_DNS_LOCAL
+      ${iptables} -t nat -N CLASH_DNS_LOCAL
+      ${iptables} -t nat -F CLASH_DNS_LOCAL
 
-    ${iptables} -t nat -A CLASH_DNS_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
+      ${iptables} -t nat -A CLASH_DNS_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
 
-    ${iptables} -t nat -A CLASH_DNS_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
+      ${iptables} -t nat -A CLASH_DNS_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
 
-    ${iptables} -t nat -I OUTPUT -j CLASH_DNS_LOCAL
+      ${iptables} -t nat -I OUTPUT -j CLASH_DNS_LOCAL
+    fi
   fi
 
   # Fix ICMP (ping), this does not guarantee that the ping result is valid (proxies such as clash do not support forwarding ICMP),
