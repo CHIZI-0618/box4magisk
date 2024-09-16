@@ -62,8 +62,8 @@ start_redirect() {
   if [ "${bin_name}" = "clash" ] ; then
     ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
     ${iptables} -t nat -A BOX_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
-    ${iptables} -t nat -A BOX_EXTERNAL -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
-    ${iptables} -t nat -A BOX_LOCAL -d ${clash_fake_ip_range} -p icmp -j DNAT --to-destination 127.0.0.1
+    ${iptables} -t nat -A BOX_EXTERNAL -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
+    ${iptables} -t nat -A BOX_LOCAL -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
 #  else
 #    Other types of inbound should be added here to receive DNS traffic instead of sniffing
 #    ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${redir_port}
@@ -73,6 +73,10 @@ start_redirect() {
   for subnet in ${intranet[@]} ; do
     ${iptables} -t nat -A BOX_EXTERNAL -d ${subnet} -j RETURN
     ${iptables} -t nat -A BOX_LOCAL -d ${subnet} -j RETURN
+    ${iptables} -t nat -N LOCAL_IP_V4
+    ${iptables} -t nat -F LOCAL_IP_V4
+    ${iptables} -t nat -A BOX_EXTERNAL -j LOCAL_IP_V4
+    ${iptables} -t nat -A BOX_LOCAL -j LOCAL_IP_V4
   done
 
   ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i lo -j REDIRECT --to-ports ${redir_port}
@@ -159,6 +163,8 @@ stop_redirect() {
   ${iptables} -t nat -X BOX_EXTERNAL
   ${iptables} -t nat -F BOX_LOCAL
   ${iptables} -t nat -X BOX_LOCAL
+  ${iptables} -t nat -F LOCAL_IP_V4
+  ${iptables} -t nat -X LOCAL_IP_V4
 }
 
 start_tproxy() {
@@ -203,10 +209,16 @@ start_tproxy() {
     for subnet6 in ${intranet6[@]} ; do
       ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet6} -j RETURN
     done
+    ${iptables} -t mangle -N LOCAL_IP_V6
+    ${iptables} -t mangle -F LOCAL_IP_V6
+    ${iptables} -t mangle -A BOX_EXTERNAL -j LOCAL_IP_V6
   else
     for subnet in ${intranet[@]} ; do
       ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} -j RETURN
     done
+    ${iptables} -t mangle -N LOCAL_IP_V4
+    ${iptables} -t mangle -F LOCAL_IP_V4
+    ${iptables} -t mangle -A BOX_EXTERNAL -j LOCAL_IP_V4
   fi
 
   ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -i lo -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
@@ -255,10 +267,12 @@ start_tproxy() {
     for subnet6 in ${intranet6[@]} ; do
       ${iptables} -t mangle -A BOX_LOCAL -d ${subnet6} -j RETURN
     done
+    ${iptables} -t mangle -A BOX_LOCAL -j LOCAL_IP_V6
   else
     for subnet in ${intranet[@]} ; do
       ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -j RETURN
     done
+    ${iptables} -t mangle -A BOX_LOCAL -j LOCAL_IP_V4
   fi
 
   # Disable kernel
@@ -384,6 +398,11 @@ stop_tproxy() {
 
   ${iptables} -t mangle -F BOX_LOCAL
   ${iptables} -t mangle -X BOX_LOCAL
+
+  iptables -t mangle -F LOCAL_IP_V4
+  iptables -t mangle -X LOCAL_IP_V4
+  ip6tables -t mangle -F LOCAL_IP_V6
+  ip6tables -t mangle -X LOCAL_IP_V6
 
   ${iptables} -t mangle -F DIVERT
   ${iptables} -t mangle -X DIVERT
