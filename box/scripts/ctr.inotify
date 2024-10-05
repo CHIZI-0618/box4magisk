@@ -81,12 +81,12 @@ clashMode(){
 	if [ $1 = 0 ]; then # disconnect, on CellularNetwork
 		if [ "${sta}" = 0 ]; then
 			local target
-			target="${default_mode}"
+			target="${default_clash_mode}"
 			if [ -n "${ClashMode}" ]; then
 				target="${ClashMode}"
 			fi
-			if [ -n "${proxy_mode}" ]; then
-				target="${proxy_mode}"
+			if [ -n "${proxy_clash_mode}" ]; then
+				target="${proxy_clash_mode}"
 			fi
 			setMode "${target}"
 		elif [ "${sta}" = 2 ] || [ "${sta}" = 3 ]; then
@@ -98,9 +98,9 @@ clashMode(){
 			local target
 			if [ "${use_custom_direct}" = "true" ]; then
 				local ssid=`ssid`
-				target=`getTarget "${direct_mode_list}" "${ssid}"`
+				target=`getTarget "${direct_clash_mode_list}" "${ssid}"`
 			else
-				target="${direct_mode}"
+				target="${direct_clash_mode}"
 			fi
 			getNowMode > "${run_path}/.lastClashMode"
 			setMode "${target}"
