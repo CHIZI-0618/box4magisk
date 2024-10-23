@@ -22,7 +22,7 @@ connected(){
 }
 
 status(){
-	curl "127.0.0.1:9999/configs" &>/dev/null
+	curl "127.0.0.1:${clash_api_port}/configs" &>/dev/null
 	if ! [ $? = 0 ]; then
 		return 1
 	fi
