@@ -63,7 +63,6 @@ dns:
     - https://dns.cloudflare.com/dns-query
     - https://dns.google/dns-query
   nameserver-policy:
-    "rule-set:AWAvenue-Ads": rcode://success
     "rule-set:private-domain,alibaba,category-games@cn,cn-domain":
       - https://120.53.53.53/dns-query
       - https://223.5.5.5/dns-query
