@@ -17,10 +17,11 @@ readonly IPTABLES_TIMEOUT="100"
 
 # 日志
 log() {
-  local level="$1"
-  local message="$2"
-  local timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
-  local color_code="\033[0m"
+  local level message timestamp color_code
+  level="$1"
+  message="$2"
+  timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+  color_code="\033[0m"
 
   case $level in
     Debug) color_code="\033[0;36m" ;;
@@ -36,8 +37,9 @@ log() {
 
 # 检查依赖
 check_dependencies() {
-  local missing=()
-  local required_commands=(busybox ip iptables)
+  local cmd missing required_commands required_applets
+  missing=()
+  required_commands=(busybox ip iptables)
 
   for cmd in "${required_commands[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -52,7 +54,7 @@ check_dependencies() {
   fi
 
   # 验证 busybox 必要小工具
-  # local required_applets=(awk cut grep pidof stat)
+  # required_applets=(awk cut grep pidof stat)
   # for applet in "${required_applets[@]}"; do
   #  if ! busybox --list | grep -q "^${applet}\$"; then
   #    log Error "busybox missing applet: $applet"
@@ -63,8 +65,9 @@ check_dependencies() {
 
 # 检查内核特性
 check_kernel_feature() {
-  local feature="$1"
-  local config_name="CONFIG_${feature}"
+  local feature config_name
+  feature="$1"
+  config_name="CONFIG_${feature}"
 
   if [ -f /proc/config.gz ]; then
     zcat /proc/config.gz | grep -qE "^${config_name}=[ym]$"
@@ -81,7 +84,7 @@ load_config() {
     log Error "Config file ${CONFIG_FILE} not found"
     exit 1
   }
-  source "${CONFIG_FILE}" || {
+  . "${CONFIG_FILE}" || {
     log Error "Failed to load config file"
     exit 1
   }
@@ -89,10 +92,11 @@ load_config() {
 
 # 检查必需参数
 validate_vars() {
-  local required_vars=("$@")
+  local required_vars var
+  required_vars=("$@")
   for var in "${required_vars[@]}"; do
     [ -z "${!var}" ] && {
-      log Error "Missing required var: $var"
+      log Error "Missing required var: ${var}"
       return 1
     }
   done
@@ -113,17 +117,19 @@ validate_user_group() {
 
 # 包名查找 UID
 find_packages_uid() {
+  local user package uid
   uid_list=()
   for user_package in "${user_packages_list[@]}"; do
-    local user="$(echo "${user_package}" | cut -d: -f1)"
-    local package="$(echo "${user_package}" | cut -d: -f2)"
-    local uid="$(awk -v pkg="${package}" '$1 == pkg {print $2}' /data/system/packages.list)"
-    [ -n "$uid" ] && uid_list+=($((user * 100000 + uid)))
+    user="$(echo "${user_package}" | cut -d: -f1)"
+    package="$(echo "${user_package}" | cut -d: -f2)"
+    uid="$(awk -v pkg="${package}" '$1 == pkg {print $2}' /data/system/packages.list)"
+    [ -n "${uid}" ] && uid_list+=($((user * 100000 + uid)))
   done
 }
 
 # 探测 core 运行用户与组
 probe_core_user_group() {
+  local bin_pid
   # 尝试通过 pidof 获取进程 ID
   if bin_pid=$(pidof "${bin_name}" 2>/dev/null); then
     log Debug "Found ${bin_name} PID via pidof: ${bin_pid}"
@@ -170,11 +176,14 @@ ad_ip_rules() {
 
 # 添加 iptables 规则
 add_ipt_rule() {
-  local action="$1"
-  local table="$2"
-  local chain="$3"
-  local rule="$4"
-  # local ipt_cmd="$5"
+  local action table chain rule
+  action="$1"
+  table="$2"
+  chain="$3"
+  rule="$4"
+
+  # local ipt_cmd
+  # ipt_cmd="$5"
 
   # if [ "$ipt_cmd" = "v6" ]; then
   #   ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
@@ -182,7 +191,7 @@ add_ipt_rule() {
   #   ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
   # fi
 
-  if [ "$action" = "N" ] || [ -z "$rule" ]; then
+  if [ "${action}" = "N" ] || [ -z "${rule}" ]; then
     if ! ${ipt_cmd} -t "${table}" -L "${chain}" >/dev/null 2>&1; then
       ${ipt_cmd} -t "${table}" -N "${chain}" || {
         log Error "Failed to create chain: ${ipt_cmd} -t ${table} -N ${chain}"
@@ -236,7 +245,7 @@ start_redirect() {
 start_tproxy() {
   ad_ip_rules add add
 
-  add_ipt_rule A mangle BOX_EXTERNAL
+  add_ipt_rule N mangle BOX_EXTERNAL
   add_ipt_rule N mangle BOX_LOCAL
 
   # handle_core_return_rules mangle BOX_EXTERNAL
@@ -274,9 +283,6 @@ stop_redirect() {
   iptables -t nat -X LOCAL_IP_V4
   ip6tables -t nat -F LOCAL_IP_V6
   ip6tables -t nat -X LOCAL_IP_V6
-
-  fix_fakeip_icmp disable
-  reject_local_traffic disable "${redir_port}"
 }
 
 # 清理 TPROXY 模式
@@ -304,9 +310,6 @@ stop_tproxy() {
 
   ${ipt_cmd} -t mangle -F DIVERT
   ${ipt_cmd} -t mangle -X DIVERT
-
-  fix_fakeip_icmp disable
-  reject_local_traffic disable "${tproxy_port}"
 }
 
 stop_dns_redirect() {
@@ -322,14 +325,15 @@ stop_dns_redirect() {
 
 # 处理内网路由规则
 handle_intranet_rules() {
-  local table="$1"
-  local chain="$2"
+  local table chain subnet subnets local_chain local_subnets local_ip
+  table="$1"
+  chain="$2"
 
-  case "$ipt_cmd" in
+  case "${ipt_cmd}" in
     iptables*)
-      local subnets=("${intranet[@]}")
-      local local_subnets=("${intranet_subnets[@]}")
-      local local_chain="LOCAL_IP_V4"
+      subnets=("${intranet[@]}")
+      local_subnets=("${intranet_subnets[@]}")
+      local_chain="LOCAL_IP_V4"
       ;;
     ip6tables*)
       local subnets=("${intranet6[@]}")
@@ -339,20 +343,20 @@ handle_intranet_rules() {
   esac
 
   if check_kernel_feature "NETFILTER_XT_MATCH_ADDRTYPE"; then
-    add_ipt_rule A "$table" "$chain" "-m addrtype --dst-type LOCAL -j RETURN"
+    add_ipt_rule A "${table}" "${chain}" "-m addrtype --dst-type LOCAL -j RETURN"
   fi
 
   for subnet in "${subnets[@]}"; do
-    add_ipt_rule A "$table" "$chain" "-d ${subnet} -j RETURN"
+    add_ipt_rule A "${table}" "${chain}" "-d ${subnet} -j RETURN"
   done
 
-  add_ipt_rule N "$table" "$local_chain"
+  add_ipt_rule N "${table}" "${local_chain}"
 
   for local_ip in "${local_subnets[@]}"; do
-    add_ipt_rule A "$table" "${local_chain}" "-d ${local_ip} -j ACCEPT"
+    add_ipt_rule A "${table}" "${local_chain}" "-d ${local_ip} -j ACCEPT"
   done
 
-  add_ipt_rule A "$table" "$chain" "-j ${local_chain}"
+  add_ipt_rule A "${table}" "${chain}" "-j ${local_chain}"
 }
 
 # 处理代理接口规则
@@ -360,12 +364,11 @@ handle_intranet_rules() {
 # Notice: Old android device may only have one wlan interface
 # Some new android device have multiple wlan interface like wlan0(for internet), wlan1(for AP)
 handle_ap_rules() {
-  local table="$1"
-  local port="$2"
-  local ipt_rule
-  local proto_list
+  local table port ipt_rule proto_list ap proto
+  table="$1"
+  port="$2"
 
-  case "$table" in
+  case "${table}" in
     nat)
       ipt_rule="-j REDIRECT --to-ports ${port}"
       proto_list=("tcp")
@@ -380,7 +383,7 @@ handle_ap_rules() {
 
   for ap in "${ap_list[@]}"; do
     for proto in "${proto_list[@]}"; do
-      add_ipt_rule A "$table" BOX_EXTERNAL "-p $proto -i $ap $ipt_rule" "$3"
+      add_ipt_rule A "${table}" "BOX_EXTERNAL" "-p ${proto} -i ${ap} ${ipt_rule}"
     done
   done
   log Info "Interfaces configured for transparent proxy: ${ap_list[*]}"
@@ -388,25 +391,27 @@ handle_ap_rules() {
 
 # 处理 core 自身流量绕过规则
 handle_core_return_rules() {
-  local table="$1"
-  local chain="$2"
+  local table chain
+  table="$1"
+  chain="$2"
 
   if check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
-    add_ipt_rule A "$table" "$chain" "-m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN"
+    add_ipt_rule A "${table}" "${chain}" "-m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN"
   elif check_kernel_feature "NETFILTER_XT_MATCH_MARK"; then
     log Warn "owner match not supported, falling back to mark match"
-    add_ipt_rule A "$table" "$chain" "-m mark --mark ${ROUTING_MARK} -j RETURN"
+    add_ipt_rule A "${table}" "${chain}" "-m mark --mark ${ROUTING_MARK} -j RETURN"
   fi
 }
 
 # 处理忽略代理接口规则
 handle_ignore_out_rules() {
-  local table="$1"
+  local table ignore
+  table="$1"
 
   {
     for ignore in "${ignore_out_list[@]}"; do
-      if $ignore != "lo"; then
-        add_ipt_rule A "$table" BOX_LOCAL "-o ${ignore} -j RETURN"
+      if ${ignore} != "lo"; then
+        add_ipt_rule A "${table}" "BOX_LOCAL" "-o ${ignore} -j RETURN"
       fi
     done
   } \
@@ -415,7 +420,8 @@ handle_ignore_out_rules() {
 
 # 处理代理模式规则
 handle_proxy_mode() {
-  local table="$1"
+  local table
+  table="$1"
 
   if [ ${#uid_list[@]} -eq 0 ] && [ ${#gid_list[@]} -eq 0 ]; then
     handle_default_mode
@@ -444,7 +450,8 @@ handle_proxy_mode() {
 
 # 处理默认模式代理规则
 handle_default_mode() {
-  local table="$1"
+  local table
+  table="$1"
 
   case "${table}" in
     nat)
@@ -459,13 +466,14 @@ handle_default_mode() {
 
 # 处理黑名单模式规则
 handle_blacklist_mode() {
-  local table="$1"
+  local table
+  table="$1"
 
   # Bypass uid
-  handle_user_group_rules "$table" "blacklist" "uid"
+  handle_user_group_rules "${table}" "blacklist" "uid"
 
   # Bypass gid
-  handle_user_group_rules "$table" "blacklist" "gid"
+  handle_user_group_rules "${table}" "blacklist" "gid"
 
   # Allow !uid/gid
   handle_default_mode "${table}"
@@ -473,17 +481,18 @@ handle_blacklist_mode() {
 
 # 处理白名单模式规则
 handle_whitelist_mode() {
-  local table="$1"
+  local table
+  table="$1"
 
   # Allow uid/gid
-  handle_user_group_rules "$table" "whitelist" "uid"
-  handle_user_group_rules "$table" "whitelist" "gid"
+  handle_user_group_rules "${table}" "whitelist" "uid"
+  handle_user_group_rules "${table}" "whitelist" "gid"
 
   # Allow root and dnsmasq
-  if [ "$table" = "nat" ]; then
-    add_ipt_rule A "${table}" "BOX_LOCAL" "-m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}"
-    add_ipt_rule A "${table}" "BOX_LOCAL" "-m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}"
-  elif [ "$table" = "mangle" ]; then
+  if [ "${table}" = "nat" ]; then
+    add_ipt_rule A "${table}" "BOX_LOCAL" "-p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}"
+    add_ipt_rule A "${table}" "BOX_LOCAL" "-p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}"
+  elif [ "${table}" = "mangle" ]; then
     for proto in tcp udp; do
       add_ipt_rule A "${table}" "BOX_LOCAL" "-p ${proto} -m owner --uid-owner 0 -j MARK --set-xmark ${MARK_ID}"
       add_ipt_rule A "${table}" "BOX_LOCAL" "-p ${proto} -m owner --uid-owner 1052 -j MARK --set-xmark ${MARK_ID}"
@@ -496,11 +505,11 @@ handle_whitelist_mode() {
 
 # 处理 UID/GID 规则
 handle_user_group_rules() {
-  local table="$1"
-  local mode="$2"
-  local type="$3"
+  local table mode type list id
+  table="$1"
+  mode="$2"
+  type="$3"
 
-  local list=()
   if [ "$type" = "uid" ]; then
     list=("${uid_list[@]}")
   elif [ "$type" = "gid" ]; then
@@ -513,7 +522,7 @@ handle_user_group_rules() {
         add_ipt_rule A "${table}" "BOX_LOCAL" "-m owner --${type}-owner ${id} -j RETURN"
       elif [ "$mode" = "whitelist" ]; then
         if [ "$table" = "nat" ]; then
-          add_ipt_rule A "${table}" "BOX_LOCAL" "-m owner --${type}-owner ${id} -j REDIRECT --to-ports ${redir_port}"
+          add_ipt_rule A "${table}" "BOX_LOCAL" "-p tcp -m owner --${type}-owner ${id} -j REDIRECT --to-ports ${redir_port}"
         elif [ "$table" = "mangle" ]; then
           add_ipt_rule A "${table}" "BOX_LOCAL" "-p tcp -m owner --${type}-owner ${id} -j MARK --set-xmark ${MARK_ID}"
           add_ipt_rule A "${table}" "BOX_LOCAL" "-p udp -m owner --${type}-owner ${id} -j MARK --set-xmark ${MARK_ID}"
@@ -545,7 +554,8 @@ handle_dns_rules() {
 
 # 设置 dns 转发规则
 setup_dns_redirect_rules() {
-  local dns_port="$1"
+  local dns_port
+  dns_port="$1"
 
   add_ipt_rule N nat DNS_EXTERNAL
   add_ipt_rule N nat DNS_LOCAL
@@ -561,8 +571,9 @@ setup_dns_redirect_rules() {
 
 # 设置 dns 转发
 setup_dns_redirect() {
-  local dns_port="$1"
-  local ipt_rule="-p udp --dport 53 -j REDIRECT --to-ports ${dns_port}"
+  local dns_port ipt_rule
+  dns_port="$1"
+  ipt_rule="-p udp --dport 53 -j REDIRECT --to-ports ${dns_port}"
 
   add_ipt_rule A nat DNS_EXTERNAL "${ipt_rule}"
   add_ipt_rule A nat DNS_LOCAL "${ipt_rule}"
@@ -570,6 +581,7 @@ setup_dns_redirect() {
 
 # 设置 dns 绕过 tproxy
 setup_dns_tproxy_return() {
+  local proto
   for proto in tcp udp; do
     add_ipt_rule A mangle BOX_EXTERNAL "-p ${proto} --dport 53 -j RETURN"
     add_ipt_rule A mangle BOX_LOCAL "-p ${proto} --dport 53 -j RETURN"
@@ -578,6 +590,7 @@ setup_dns_tproxy_return() {
 
 # 设置 dns 通过 tproxy
 setup_dns_tproxy() {
+  local proto
   for proto in tcp udp; do
     add_ipt_rule A mangle BOX_EXTERNAL "-p ${proto} --dport 53 -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${MARK_ID}"
     add_ipt_rule A mangle BOX_LOCAL "-p ${proto} --dport 53 -j MARK --set-xmark ${MARK_ID}"
@@ -588,20 +601,20 @@ setup_dns_tproxy() {
 reject_local_traffic() {
   local proxy_port="$2"
 
-  case $1 in
+  case "$1" in
     enable)
       ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
-      add_ipt_rule A filter OUTPUT "-d 127.0.0.1 -m owner --uid-owner $box_user --gid-owner $box_group --dport $proxy_port -j REJECT"
+      add_ipt_rule A filter OUTPUT "-d 127.0.0.1 -m owner --uid-owner ${box_user} --gid-owner ${box_group} --dport ${proxy_port} -j REJECT"
       ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
-      add_ipt_rule A filter OUTPUT "-d ::1 -m owner --uid-owner $box_user --gid-owner $box_group --dport $proxy_port -j REJECT"
+      add_ipt_rule A filter OUTPUT "-d ::1 -m owner --uid-owner ${box_user} --gid-owner ${box_group} --dport ${proxy_port} -j REJECT"
 
       ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
       ;;
     disable)
-      iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner root --gid-owner net_admin -m tcp --dport "$proxy_port" -j REJECT
-      ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner root --gid-owner net_admin -m tcp --dport "$proxy_port" -j REJECT
-      iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "$proxy_port" -j REJECT
-      ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "$proxy_port" -j REJECT
+      iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner root --gid-owner net_admin -m tcp --dport "${proxy_port}" -j REJECT
+      ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner root --gid-owner net_admin -m tcp --dport "${proxy_port}" -j REJECT
+      iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "${proxy_port}" -j REJECT
+      ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "${proxy_port}" -j REJECT
       ;;
   esac
 }
@@ -610,7 +623,7 @@ reject_local_traffic() {
 # Fix ICMP (ping), this does not guarantee that the ping result is valid (proxies such as clash do not support forwarding ICMP),
 # just that it returns a result, "--to-destination" can be set to a reachable address
 fix_fakeip_icmp() {
-  case $1 in
+  case "$1" in
     enable)
       ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
       add_ipt_rule A nat PREROUTING "-d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1"
@@ -658,7 +671,7 @@ setup_redirect() {
 
   ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
   start_redirect \
-    && log Info "Successfully set up REDIRECT rules (IPv4)" \
+    && log Info "Successfully setup REDIRECT rules (IPv4)" \
     || log Error "Failed to setup REDIRECT rules (IPv4)"
 
   reject_local_traffic enable "${redir_port}"
@@ -672,7 +685,7 @@ setup_redirect() {
     intranet6_subnets="($(ip -6 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -vE '(^::1|^fe80|^fd00)'))"
     ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
     start_redirect \
-      && log Info "Successfully set up REDIRECT rules (IPv6)" \
+      && log Info "Successfully setup REDIRECT rules (IPv6)" \
       || log Error "Failed to setup REDIRECT rules (IPv6)"
   fi
 }
@@ -694,7 +707,7 @@ setup_tproxy() {
   ip_cmd="ip"
   ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
   start_tproxy \
-    && log Info "Successfully set up TPROXY rules (IPv4)" \
+    && log Info "Successfully setup TPROXY rules (IPv4)" \
     || log Error "Failed to setup TPROXY rules (IPv4)"
 
   reject_local_traffic enable "${tproxy_port}"
@@ -757,6 +770,10 @@ teardown_firewall() {
   stop_redirect 2>/dev/null
   stop_tproxy 2>/dev/null
   stop_dns_redirect 2>/dev/null
+
+  fix_fakeip_icmp disable
+  reject_local_traffic disable "${redir_port}"
+  reject_local_traffic disable "${tproxy_port}"
 
   # handle_ipv6_settings restore
 }
