@@ -336,9 +336,9 @@ handle_intranet_rules() {
       local_chain="LOCAL_IP_V4"
       ;;
     ip6tables*)
-      local subnets=("${intranet6[@]}")
-      local local_subnets=("${intranet6_subnets[@]}")
-      local local_chain="LOCAL_IP_V6"
+      subnets=("${intranet6[@]}")
+      local_subnets=("${intranet6_subnets[@]}")
+      local_chain="LOCAL_IP_V6"
       ;;
   esac
 
@@ -783,6 +783,10 @@ teardown_firewall() {
 # 主函数
 main() {
   check_dependencies # 执行依赖检查
+  load_config
+  if ! validate_vars "bin_name"; then
+    exit 1
+  fi
 
   case "$1" in
     enable)
