@@ -195,7 +195,7 @@ add_ipt_rule() {
       return 2
     fi
   fi
- 
+
   if ! ${ipt_cmd} -t "${table}" -C "${chain}" "${rule}" >/dev/null 2>&1; then
     ${ipt_cmd} -t "${table}" -"${action}" "${chain}" "${rule}" || {
       log Error "Failed to add rule: ${ipt_cmd} -t ${table} -${action} ${chain} ${rule}"
@@ -266,9 +266,6 @@ stop_redirect() {
   ${ipt_cmd} -t nat -D PREROUTING -j BOX_EXTERNAL
   ${ipt_cmd} -t nat -D OUTPUT -j BOX_LOCAL
 
-  iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" --dport "${redir_port}" -j REJECT
-  ip6tables -t filter -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" --dport "${redir_port}" -j REJECT
-
   ${ipt_cmd} -t nat -F BOX_EXTERNAL
   ${ipt_cmd} -t nat -X BOX_EXTERNAL
   ${ipt_cmd} -t nat -F BOX_LOCAL
@@ -277,6 +274,9 @@ stop_redirect() {
   iptables -t nat -X LOCAL_IP_V4
   ip6tables -t nat -F LOCAL_IP_V6
   ip6tables -t nat -X LOCAL_IP_V6
+
+  fix_fakeip_icmp disable
+  reject_local_traffic disable "${redir_port}"
 }
 
 # 清理 TPROXY 模式
@@ -305,23 +305,8 @@ stop_tproxy() {
   ${ipt_cmd} -t mangle -F DIVERT
   ${ipt_cmd} -t mangle -X DIVERT
 
-  iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "${tproxy_port}" -j REJECT
-  ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "${tproxy_port}" -j REJECT
-
-  ${ipt_cmd} -t nat -D PREROUTING -j CLASH_DNS_EXTERNAL
-
-  ${ipt_cmd} -t nat -D OUTPUT -j CLASH_DNS_LOCAL
-
-  ${ipt_cmd} -t nat -F CLASH_DNS_EXTERNAL
-  ${ipt_cmd} -t nat -X CLASH_DNS_EXTERNAL
-
-  ${ipt_cmd} -t nat -F CLASH_DNS_LOCAL
-  ${ipt_cmd} -t nat -X CLASH_DNS_LOCAL
-
-  iptables -t nat -D OUTPUT -d "${fake_ip_range_v4}" -p icmp -j DNAT --to-destination 127.0.0.1
-  iptables -t nat -D PREROUTING -d "${fake_ip_range_v4}" -p icmp -j DNAT --to-destination 127.0.0.1
-  ip6tables -t nat -D OUTPUT -d "${fake_ip_range_v6}" -p icmp -j DNAT --to-destination ::1
-  ip6tables -t nat -D PREROUTING -d "${fake_ip_range_v6}" -p icmp -j DNAT --to-destination ::1
+  fix_fakeip_icmp disable
+  reject_local_traffic disable "${tproxy_port}"
 }
 
 stop_dns_redirect() {
@@ -601,31 +586,51 @@ setup_dns_tproxy() {
 
 # 禁止本地直接访问透明代理端口
 reject_local_traffic() {
-  local proxy_port="$1"
+  local proxy_port="$2"
 
-  ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
-  add_ipt_rule A filter OUTPUT "-d 127.0.0.1 -m owner --uid-owner $box_user --gid-owner $box_group --dport $proxy_port -j REJECT"
-  ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
-  add_ipt_rule A filter OUTPUT "-d ::1 -m owner --uid-owner $box_user --gid-owner $box_group --dport $proxy_port -j REJECT"
+  case $1 in
+    enable)
+      ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
+      add_ipt_rule A filter OUTPUT "-d 127.0.0.1 -m owner --uid-owner $box_user --gid-owner $box_group --dport $proxy_port -j REJECT"
+      ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
+      add_ipt_rule A filter OUTPUT "-d ::1 -m owner --uid-owner $box_user --gid-owner $box_group --dport $proxy_port -j REJECT"
 
-  ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
+      ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
+      ;;
+    disable)
+      iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner root --gid-owner net_admin -m tcp --dport "$proxy_port" -j REJECT
+      ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner root --gid-owner net_admin -m tcp --dport "$proxy_port" -j REJECT
+      iptables -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "$proxy_port" -j REJECT
+      ip6tables -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "${box_user}" --gid-owner "${box_group}" -m tcp --dport "$proxy_port" -j REJECT
+      ;;
+  esac
 }
 
 # fakeip 时 ping 假可达
 # Fix ICMP (ping), this does not guarantee that the ping result is valid (proxies such as clash do not support forwarding ICMP),
 # just that it returns a result, "--to-destination" can be set to a reachable address
 fix_fakeip_icmp() {
-  ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
-  add_ipt_rule A nat PREROUTING "-d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1"
-  add_ipt_rule A nat OUTPUT "-d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1"
+  case $1 in
+    enable)
+      ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
+      add_ipt_rule A nat PREROUTING "-d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1"
+      add_ipt_rule A nat OUTPUT "-d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1"
 
-  if check_kernel_feature "IP6_NF_TARGET_REDIRECT"; then
-    ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
-    add_ipt_rule A nat PREROUTING "-d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1"
-    add_ipt_rule A nat OUTPUT "-d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1"
-  fi
+      if check_kernel_feature "IP6_NF_TARGET_REDIRECT"; then
+        ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
+        add_ipt_rule A nat PREROUTING "-d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1"
+        add_ipt_rule A nat OUTPUT "-d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1"
+      fi
 
-  ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
+      ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
+      ;;
+    disable)
+      iptables -t nat -D OUTPUT -d "${fake_ip_range_v4}" -p icmp -j DNAT --to-destination 127.0.0.1
+      iptables -t nat -D PREROUTING -d "${fake_ip_range_v4}" -p icmp -j DNAT --to-destination 127.0.0.1
+      ip6tables -t nat -D OUTPUT -d "${fake_ip_range_v6}" -p icmp -j DNAT --to-destination ::1
+      ip6tables -t nat -D PREROUTING -d "${fake_ip_range_v6}" -p icmp -j DNAT --to-destination ::1
+      ;;
+  esac
 }
 
 # 处理 DIVERT 规则
@@ -656,8 +661,8 @@ setup_redirect() {
     && log Info "Successfully set up REDIRECT rules (IPv4)" \
     || log Error "Failed to setup REDIRECT rules (IPv4)"
 
-  reject_local_traffic "${redir_port}"
-  fix_fakeip_icmp
+  reject_local_traffic enable "${redir_port}"
+  fix_fakeip_icmp enable
 
   if [ "${ipv6}" = "enable" ]; then
     if ! check_kernel_feature "IP6_NF_TARGET_REDIRECT"; then
@@ -691,9 +696,9 @@ setup_tproxy() {
   start_tproxy \
     && log Info "Successfully set up TPROXY rules (IPv4)" \
     || log Error "Failed to setup TPROXY rules (IPv4)"
-  
-  reject_local_traffic "${tproxy_port}"
-  fix_fakeip_icmp
+
+  reject_local_traffic enable "${tproxy_port}"
+  fix_fakeip_icmp enable
 
   if [ "${ipv6}" = "enable" ]; then
     ip_cmd="ip -6"
@@ -761,7 +766,6 @@ teardown_firewall() {
 # 主函数
 main() {
   check_dependencies # 执行依赖检查
-  validate_vars      # 验证配置
 
   case "$1" in
     enable)
