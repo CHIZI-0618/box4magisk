@@ -171,12 +171,12 @@ probe_core_user_group() {
 # 增删 TPROXY 策略路由
 ad_ip_rules() {
   ${ip_cmd} rule "$1" fwmark ${MARK_ID} table ${TABLE_ID} pref ${TABLE_ID}
-  ${ip_cmd} route "$2" local default dev lo table ${TABLE_ID}
+  ${ip_cmd} route "$1" local default dev lo table ${TABLE_ID}
 }
 
 # 添加 iptables 规则
 add_ipt_rule() {
-  local action table chain rule
+  local action table chain rule full_cmd
   action="$1"
   table="$2"
   chain="$3"
@@ -193,27 +193,31 @@ add_ipt_rule() {
 
   if [ "${action}" = "N" ] || [ -z "${rule}" ]; then
     if ! ${ipt_cmd} -t "${table}" -L "${chain}" >/dev/null 2>&1; then
-      ${ipt_cmd} -t "${table}" -N "${chain}" || {
-        log Error "Failed to create chain: ${ipt_cmd} -t ${table} -N ${chain}"
+      full_cmd="${ipt_cmd} -t ${table} -N ${chain}"
+      eval "${full_cmd}" || {
+        log Error "Failed to create chain: ${full_cmd}"
         return 1
       }
-      log Debug "Created chain: ${ipt_cmd} -t ${table} -N ${chain}"
+      log Debug "Created chain: ${full_cmd}"
       return 0
     else
-      log Debug "Rule exists: ${ipt_cmd} -t ${table} -N ${chain}"
+      log Debug "Rule exists: ${full_cmd}"
       return 2
     fi
   fi
 
-  if ! ${ipt_cmd} -t "${table}" -C "${chain}" "${rule}" >/dev/null 2>&1; then
-    ${ipt_cmd} -t "${table}" -"${action}" "${chain}" "${rule}" || {
-      log Error "Failed to add rule: ${ipt_cmd} -t ${table} -${action} ${chain} ${rule}"
+  # 检查规则是否已经存在
+  full_cmd="${ipt_cmd} -t ${table} -C ${chain} ${rule}"
+  if ! eval "${full_cmd}" >/dev/null 2>&1; then
+    full_cmd="${ipt_cmd} -t ${table} -${action} ${chain} ${rule}"
+    eval "${full_cmd}" || {
+      log Error "Failed to add rule: ${full_cmd}"
       return 1
     }
-    log Debug "Added rule: ${ipt_cmd} -t ${table} -${action} ${chain} ${rule}"
+    log Debug "Added rule: ${full_cmd}"
     return 0
   else
-    log Debug "Rule exists: ${ipt_cmd} -t ${table} -${action} ${chain} ${rule}"
+    log Debug "Rule exists: ${full_cmd}"
     return 2
   fi
 }
@@ -243,7 +247,7 @@ start_redirect() {
 
 # 启动 TPROXY 模式
 start_tproxy() {
-  ad_ip_rules add add
+  ad_ip_rules add
 
   add_ipt_rule N mangle BOX_EXTERNAL
   add_ipt_rule N mangle BOX_LOCAL
@@ -289,7 +293,7 @@ stop_redirect() {
 stop_tproxy() {
   log Info "Cleaning TPROXY rules"
 
-  ad_ip_rules del flush
+  ad_ip_rules del
 
   ${ipt_cmd} -t mangle -D PREROUTING -j BOX_EXTERNAL
 
@@ -604,9 +608,9 @@ reject_local_traffic() {
   case "$1" in
     enable)
       ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
-      add_ipt_rule A filter OUTPUT "-d 127.0.0.1 -m owner --uid-owner ${box_user} --gid-owner ${box_group} --dport ${proxy_port} -j REJECT"
+      add_ipt_rule A filter OUTPUT "-d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} --dport ${proxy_port} -j REJECT"
       ipt_cmd="ip6tables -w ${IPTABLES_TIMEOUT}"
-      add_ipt_rule A filter OUTPUT "-d ::1 -m owner --uid-owner ${box_user} --gid-owner ${box_group} --dport ${proxy_port} -j REJECT"
+      add_ipt_rule A filter OUTPUT "-d ::1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} --dport ${proxy_port} -j REJECT"
 
       ipt_cmd="iptables -w ${IPTABLES_TIMEOUT}"
       ;;
