@@ -412,14 +412,16 @@ handle_ignore_out_rules() {
   local table ignore
   table="$1"
 
-  {
-    for ignore in "${ignore_out_list[@]}"; do
-      if ${ignore} != "lo"; then
-        add_ipt_rule A "${table}" "BOX_LOCAL" "-o ${ignore} -j RETURN"
-      fi
-    done
-  } \
-    && log Info "Interfaces ignored for transparent proxy: ${ignore_out_list[*]}"
+  if [ ${#ignore_out_list[@]} -eq 0 ]; then
+    {
+      for ignore in "${ignore_out_list[@]}"; do
+        if ${ignore} != "lo"; then
+          add_ipt_rule A "${table}" "BOX_LOCAL" "-o ${ignore} -j RETURN"
+        fi
+      done
+    } \
+      && log Info "Interfaces ignored for transparent proxy: ${ignore_out_list[*]}"
+  fi
 }
 
 # 处理代理模式规则
