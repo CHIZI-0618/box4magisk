@@ -71,7 +71,7 @@ dns:
 #可以更改 proxy 指定的出站
 p: &p {type: http, interval: 86400, proxy: "订阅更新", header: {User-Agent: ["mihomo/1.18.3","Clash/v1.18.0"]}, health-check: {enable: true, url: https://cp.cloudflare.com, interval: 18000, lazy: true}}
 
-# url 里填写自己的订阅,名称不能重复
+# url 里填写自己的订阅链接
 proxy-providers:
   provider1:
     <<: *p
@@ -88,6 +88,7 @@ proxies:
   - name: "DNS_Hijack"
     type: dns
 
+# 所有策略组内请不要选择 DNS_Hijack 出站
 proxy-groups:
 
   - name: "默认"
@@ -107,8 +108,8 @@ proxy-groups:
     type: fallback
     include-all: true
   
-  # 若出现广告拦截规则导致的访问问题，可切换关闭拦截
-  - name: "拦截"
+  # 若出现广告拦截规则导致的访问问题，可切换 REJECT 至 DIRECT 以关闭拦截广告
+  - name: "广告"
     type: select
     proxies: [REJECT,DIRECT]
   
@@ -121,9 +122,9 @@ proxy-groups:
 rules:
   - DST-PORT,53,DNS_Hijack
   
-  - RULE-SET,AWAvenue-Ads,拦截
+  - RULE-SET,AWAvenue-Ads,广告
   - RULE-SET,private-domain,直连
-  - RULE-SET,private-ip,直连
+  - RULE-SET,private-ip,直连,no-resolve
   - RULE-SET,alibaba,直连
   - RULE-SET,category-games@cn,直连
           
