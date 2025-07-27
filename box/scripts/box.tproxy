@@ -188,12 +188,6 @@ start_tproxy() {
   # ${iptables} -t mangle -A BOX_EXTERNAL -i rmnet_data+ -j RETURN
   # ${iptables} -t mangle -A BOX_EXTERNAL -i ccmni+ -j RETURN
 
-  # Skip traffic already handled by TProxy
-  # If the interface of the default route has a public IPv4 or IPv6 address assigned by the ISP, omitting these rules will result in abnormal proxy behavior for local traffic, which may cause the entire network to run slower
-  # ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -m socket --transparent -j MARK --set-xmark ${mark_id}
-  # ${iptables} -t mangle -A BOX_EXTERNAL -p udp -m socket --transparent -j MARK --set-xmark ${mark_id}
-  # ${iptables} -t mangle -A BOX_EXTERNAL -m socket -j RETURN
-
   if [ "${mihome_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
     ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
@@ -202,6 +196,13 @@ start_tproxy() {
     ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
     ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
   fi
+
+  # Skip traffic already handled by TProxy
+  # If the interface of the default route has a public IPv4 or IPv6 address assigned by the ISP, omitting these rules will result in abnormal proxy behavior for local traffic
+  ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -m socket --transparent -j MARK --set-xmark ${mark_id}
+  ${iptables} -t mangle -A BOX_EXTERNAL -p udp -m socket --transparent -j MARK --set-xmark ${mark_id}
+  ${iptables} -t mangle -A BOX_EXTERNAL -m socket -j RETURN
+
   # Bypass intranet
   # Run `su -c 'zcat /proc/config.gz | grep -i addrtype'` to check compatibility
   # ${iptables} -t mangle -A BOX_EXTERNAL -m addrtype --dst-type LOCAL -j RETURN
@@ -334,13 +335,13 @@ start_tproxy() {
   ${iptables} -t mangle -I OUTPUT -j BOX_LOCAL
 
 
-  ${iptables} -t mangle -N DIVERT
-  ${iptables} -t mangle -F DIVERT
+  # ${iptables} -t mangle -N DIVERT
+  # ${iptables} -t mangle -F DIVERT
 
-  ${iptables} -t mangle -A DIVERT -j MARK --set-xmark ${mark_id}
-  ${iptables} -t mangle -A DIVERT -j ACCEPT
+  # ${iptables} -t mangle -A DIVERT -j MARK --set-xmark ${mark_id}
+  # ${iptables} -t mangle -A DIVERT -j ACCEPT
 
-  ${iptables} -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
+  # ${iptables} -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
 
 
   # This rule blocks local access to tproxy-port to prevent traffic loopback.
@@ -389,7 +390,7 @@ stop_tproxy() {
 
   ${iptables} -t mangle -D PREROUTING -j BOX_EXTERNAL
     
-  ${iptables} -t mangle -D PREROUTING -p tcp -m socket -j DIVERT
+  # ${iptables} -t mangle -D PREROUTING -p tcp -m socket -j DIVERT
 
   ${iptables} -t mangle -D OUTPUT -j BOX_LOCAL
 
@@ -404,8 +405,8 @@ stop_tproxy() {
   ip6tables -t mangle -F LOCAL_IP_V6
   ip6tables -t mangle -X LOCAL_IP_V6
 
-  ${iptables} -t mangle -F DIVERT
-  ${iptables} -t mangle -X DIVERT
+  # ${iptables} -t mangle -F DIVERT
+  # ${iptables} -t mangle -X DIVERT
 
   if [ "${iptables}" = "ip6tables -w 100" ] ; then
     ${iptables} -D OUTPUT -d ::1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
