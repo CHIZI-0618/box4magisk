@@ -188,7 +188,7 @@ start_tproxy() {
   # ${iptables} -t mangle -A BOX_EXTERNAL -i rmnet_data+ -j RETURN
   # ${iptables} -t mangle -A BOX_EXTERNAL -i ccmni+ -j RETURN
 
-  if [ "${mihome_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
+  if [ "${mihomo_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
     ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
   else
@@ -254,7 +254,7 @@ start_tproxy() {
     log Info "${ignore_out_list[*]} ignore transparent proxy."
   fi
 
-  if [ "${mihome_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
+  if [ "${mihomo_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
     ${iptables} -t mangle -A BOX_LOCAL -p tcp --dport 53 -j RETURN
     ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j RETURN
   else
@@ -352,7 +352,7 @@ start_tproxy() {
   fi
 
 
-  if [ "${mihome_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "clash" ] ; then
+  if [ "${mihomo_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "clash" ] ; then
     if [ "${iptables}" = "iptables -w 100" ] ; then
       # android ip6tablses no nat table
       ${iptables} -t nat -N CLASH_DNS_EXTERNAL
