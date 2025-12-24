@@ -9,6 +9,11 @@ source ${scripts_dir}/box.config
 
 mkdir -p ${run_path}
 mkdir -p ${box_path}/${bin_name}
+mkdir -p ${box_path}/${bin_name}/log
+
+if [ "$(stat -f -c %T "${box_path}/${bin_name}/log")" != "tmpfs" ]; then
+  mount -t tmpfs -o rw,noatime tmpfs "${box_path}/${bin_name}/log" > /dev/null
+fi
 
 # ${box_path}/bin/yq -i ".tproxy-port=${tproxy_port}" ${box_path}/clash/config.yaml
 # ${box_path}/bin/yq -i ".dns.listen=\"${clash_dns_listen}\"" ${box_path}/clash/config.yaml
@@ -83,7 +88,7 @@ start_bin() {
     clash|mihomo)
       if ${bin_path} -t -d ${box_path}/${bin_name} > ${run_path}/check.log 2>&1 ; then
         log Info "starting ${bin_name} service."
-        nohup busybox setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/${bin_name}_$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
+        nohup busybox setuidgid ${box_user_group} ${bin_path} -d ${box_path}/${bin_name} > ${box_path}/${bin_name}/log/$(date +%Y%m%d%H%M).log 2> ${run_path}/error_${bin_name}.log &
         echo -n $! > ${pid_file}
         return 0
       else
