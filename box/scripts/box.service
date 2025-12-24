@@ -43,7 +43,6 @@ save_private_dns() {
   local current_mode=$(/system/bin/settings get global private_dns_mode 2>/dev/null)
   if [ -z "${current_mode}" ] || [ "${current_mode}" = "null" ] || [ "${current_mode}" = "off" ]; then
     log Info "private_dns_mode is already off or not set, no need to save."
-    rm -f ${private_dns_state_file} 2>/dev/null
     return 0
   fi
   echo "${current_mode}" > ${private_dns_state_file}
