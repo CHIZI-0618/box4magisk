@@ -1,141 +1,129 @@
-# Box4Magisk/KernelSU/APatch
+# Box4Magisk / KernelSU / APatch
 
-[中文](README_zh.md)
+[English](README.md) | [中文](README_zh.md)
 
-This project deploys clash, mihomo, sing-box, v2ray, xray, hysteria proxies via [Magisk](https://github.com/topjohnwu/Magisk), [KernelSU](https://github.com/tiann/KernelSU), or [APatch](https://github.com/bmax121/APatch). It supports REDIRECT (TCP only), TPROXY (TCP + UDP), and TUN (TCP + UDP, provided by the cores). It also supports a mixed mode of REDIRECT (TCP) + TUN (UDP) proxy.
+This project is a Magisk / KernelSU / APatch module used to deploy multiple proxy cores on Android devices, including **clash**, **mihomo**, **sing-box**, **v2ray**, **xray**, and **hysteria**.
+
+Supported transparent proxy modes:
+- **REDIRECT**: TCP only
+- **TPROXY**: TCP + UDP (default and preferred)
+- **TUN**: TCP + UDP (provided by the core; supported only by sing-box, clash, and mihomo)
+- **Mixed mode**: REDIRECT (TCP) + TUN (UDP)
 
 ## Disclaimer
 
-This project is not responsible for the following: bricked devices, SD card corruption, or SoC burnouts.
+This project assumes no responsibility for device bricking, data corruption, or any other hardware or software issues.
 
-**Please ensure your configuration file does not cause a traffic loop, as this may lead to infinite device reboots.**
+**Important warning**: Please ensure that your configuration does not cause traffic looping, otherwise it may result in infinite reboot of the device.
 
-If you're not sure how to configure this module, you might need applications like ClashForAndroid, sing-box for Android, v2rayNG, surfboard, SagerNet, AnXray, etc.
+If you are not familiar with proxy configuration, it is recommended to first learn the basic concepts using user-friendly applications such as ClashForAndroid, sing-box for Android, v2rayNG, SagerNet, etc.
 
 ## Installation
 
-- Download the module package from the [Release](https://github.com/CHIZI-0618/box4magisk/releases) page, and install it via Magisk Manager, KernelSU Manager, or APatch.
-- Supports online updates via Magisk Manager (effective immediately after the update without reboot).
-- User configuration is backed up during module updates and appended to the new `/data/adb/box/scripts/box.config` file (in shell, later-defined variables override previous ones, but it's recommended to edit the `box.config` file after updating to remove redundant definitions and deprecated fields).
+1. Download the latest module ZIP package from [Releases](https://github.com/CHIZI-0618/box4magisk/releases).
+2. Install it via Magisk Manager, KernelSU Manager, or APatch Manager.
+3. Online updates are supported (effective immediately after update, no reboot required).
+4. When updating the module, user configurations will be automatically backed up and merged into the new `/data/adb/box/scripts/box.config` (it is recommended to review and clean up duplicated or deprecated fields after updating).
 
-### Note
+**Note**: The module does not include any proxy core binary files.
 
-The module does not include binary executables for [clash](https://github.com/Dreamacro/clash), [mihomo](https://github.com/MetaCubeX/mihomo), [sing-box](https://github.com/SagerNet/sing-box), [v2ray-core](https://github.com/v2fly/v2ray-core), [xray-core](https://github.com/XTLS/Xray-core), [hysteria](https://github.com/apernet/hysteria).
-
-After installing the module, please download the core files for your device's architecture and place them in the `/data/adb/box/bin/` directory.
+After installation, please manually download the core executable corresponding to your device architecture and place it into the `/data/adb/box/bin/` directory.
 
 ## Configuration
 
-- Each core works in the `/data/adb/box/core_name` directory, where the core_name is defined in the `bin_name` variable of the `/data/adb/box/scripts/box.config` file. The valid values are `clash`, `mihomo`, `sing-box`, `xray`, `v2ray`, `hysteria`, and the `bin_name` **determines the core enabled by the module**.
-- The configuration files for each core must be customized by the user. The module script checks the validity of the configuration, and the check results are stored in the `/data/adb/box/run/check.log` file.
-- Tip: The `mihomo` and `sing-box` cores come with default configurations prepared for working with the transparent proxy script. It is recommended to edit the `proxy-providers` or `outbounds` sections to add your proxy server. For advanced configurations, please refer to the respective official documentation. Links: [Clash documentation](https://github.com/Dreamacro/clash/wiki/configuration), [Mihomo documentation](https://wiki.metacubex.one), [Sing-box documentation](https://sing-box.sagernet.org/), [V2Ray documentation](https://www.v2fly.org/), [Xray documentation](https://xtls.github.io/), [Hysteria documentation](https://v2.hysteria.network/).
+### Selecting a Proxy Core
+
+Core working directory: `/data/adb/box/<core name>`  
+The core is determined by `bin_name` in `/data/adb/box/scripts/box.config`. Available values:
+
+- `sing-box` (recommended, default)
+- `clash`
+- `mihomo`
+- `xray`
+- `v2ray`
+- `hysteria`
+
+**Tip**: `mihomo` and `sing-box` include default configuration files that are preconfigured to work with transparent proxying. It is recommended to directly edit the `proxy-providers` or `outbounds` sections to add your nodes.  
+For advanced configuration, please refer to the official documentation:
+- [Clash](https://github.com/Dreamacro/clash/wiki/configuration)
+- [Mihomo](https://wiki.metacubex.one)
+- [sing-box](https://sing-box.sagernet.org/)
+- [V2Ray](https://www.v2fly.org/)
+- [Xray](https://xtls.github.io/)
+- [Hysteria](https://v2.hysteria.network/)
+
+The module automatically checks the validity of configuration files. Results are saved to `/data/adb/box/run/check.log`.
+
+### Explanation of Main box.config Options
+
+Below are the key options in `/data/adb/box/scripts/box.config`. These options support flexible combinations; for example, you can choose to proxy only mobile data and WiFi, while excluding hotspot and USB tethering. Network interface proxying supports arbitrary combinations (such as proxying only WiFi + hotspot, or only mobile data + USB), but you must correctly configure the corresponding `*_INTERFACE` variables (for example, `MOBILE_INTERFACE="rmnet_data+"`, `WIFI_INTERFACE="wlan0"`, `HOTSPOT_INTERFACE="wlan2"`, `USB_INTERFACE="rndis+"`) to match the actual interface names on your device (which can be checked using `ifconfig` or `ip link`).
+
+| Option                    | Default         | Description |
+|---------------------------|-----------------|-------------|
+| `bin_name`                | `sing-box`     | Select the proxy core to enable (determines module behavior) |
+| `CORE_USER_GROUP`         | `root:net_admin` | User and group under which the core runs (advanced users may change to a custom UID:GID; requires setcap support) |
+| `PROXY_TCP_PORT` / `PROXY_UDP_PORT` | `1536` | Transparent proxy listening ports |
+| `PROXY_MODE`              | `auto`         | Proxy mode: `auto` (prefer TPROXY), `TPROXY`, `REDIRECT`, `core` (start core only, supports native TUN) |
+| `DNS_HIJACK_ENABLE`       | `1`            | DNS hijacking (0=disabled, 1=enable TPROXY, 2=enable REDIRECT; no change needed unless necessary) |
+| `DNS_PORT`                | `1053`         | DNS listening port |
+| `MOBILE_INTERFACE`        | `rmnet_data+`  | Mobile data interface name |
+| `WIFI_INTERFACE`          | `wlan0`        | WiFi interface name |
+| `HOTSPOT_INTERFACE`       | `wlan2`        | Hotspot interface name |
+| `USB_INTERFACE`           | `rndis+`       | USB tethering interface name |
+| `PROXY_MOBILE`            | `1`            | Whether to proxy mobile data traffic (1=proxy, 0=do not proxy; supports arbitrary combinations with other interfaces) |
+| `PROXY_WIFI`              | `1`            | Whether to proxy WiFi traffic (1=proxy, 0=do not proxy; supports arbitrary combinations with other interfaces) |
+| `PROXY_HOTSPOT`           | `0`            | Whether to proxy hotspot traffic (1=proxy, 0=do not proxy; supports arbitrary combinations; MAC filtering takes effect when enabled) |
+| `PROXY_USB`               | `0`            | Whether to proxy USB tethering traffic (1=proxy, 0=do not proxy; supports arbitrary combinations with other interfaces) |
+| `PROXY_TCP` / `PROXY_UDP` | `1` / `1`      | Whether to proxy TCP/UDP (1=proxy, 0=do not proxy) |
+| `PROXY_IPV6`              | `0`            | Whether to proxy IPv6 (1=proxy, 0=disabled; in REDIRECT mode, the module automatically checks kernel support for `IP6_NF_NAT` and `IP6_NF_TARGET_REDIRECT`; if unsupported, IPv6 proxying will be ineffective) |
+| `APP_PROXY_ENABLE`        | `0`            | Enable per-application proxying (1=enable) |
+| `APP_PROXY_MODE`          | `blacklist`    | `blacklist` (bypass specified apps) or `whitelist` (proxy only specified apps) |
+| `BYPASS_APPS_LIST` / `PROXY_APPS_LIST` | Empty | Application list, format: `"userId:package.name"` (multiple entries separated by spaces, e.g. `"0:com.android.systemui" "10:com.tencent.mm"`) |
+| `GID_PROXY_ENABLE`        | `0`            | Enable per-process GID proxying (advanced) |
+| `GID_PROXY_MODE`          | `blacklist`    | `blacklist` (bypass specified GIDs) or `whitelist` (proxy only specified GIDs) |
+| `BYPASS_GIDS_LIST` / `PROXY_GIDS_LIST` | Empty | GID list (multiple entries separated by spaces) |
+| `BYPASS_CN_IP`            | `0`            | Whether to bypass Mainland China IPs (1=enable, 0=disable; requires kernel support for `ipset`; the module automatically checks support, and the feature will be disabled if unsupported; when enabled, the IP list is downloaded from the specified URL) |
+| `MAC_FILTER_ENABLE`       | `0`            | Enable MAC address filtering (1=enable, 0=disable; effective only in hotspot mode `PROXY_HOTSPOT=1`) |
+| `MAC_PROXY_MODE`          | `blacklist`    | `blacklist` (bypass specified MACs) or `whitelist` (proxy only specified MACs) |
+| `BYPASS_MACS_LIST` / `PROXY_MACS_LIST` | Empty | MAC address list (multiple entries separated by spaces, e.g. `"AA:BB:CC:DD:EE:FF" "11:22:33:44:55:66"`) |
 
 ## Usage
 
-### Regular Method (Default & Recommended)
+### General Usage (Recommended)
 
-#### Managing Service Start and Stop
+- The service starts automatically on boot.
+- Enable or disable the module via Magisk / KernelSU / APatch Manager to start or stop the service in real time (no reboot required).
 
-**The following core services are collectively referred to as Box.**
+#### Per-Application Proxying (Traffic Splitting)
 
-- The Box service will automatically run after the system starts.
-- You can start or stop the Box service in **real-time** via the Magisk Manager app, **without needing to reboot your device**. Starting the service may take a few seconds, while stopping the service may take effect immediately.
+After enabling `APP_PROXY_ENABLE=1`:
+- **Blacklist mode** (default): Proxy all applications except those specified in `BYPASS_APPS_LIST`.
+- **Whitelist mode**: Proxy only the applications specified in `PROXY_APPS_LIST` (set `APP_PROXY_MODE=whitelist`).
 
-#### Selecting Applications to be Proxied
+#### Using Core Native TUN Only (No Transparent Proxy)
 
-- Box proxies all applications (APPs) for all Android users by default.
-
-- If you want Box to proxy all applications (APPs) except certain ones, open the `/data/adb/box/scripts/box.config` file, change the `proxy_mode` value to `blacklist` (default value), and add elements to the `user_packages_list` array. The format for each element is `android_user:package_name`, separated by spaces. This will **exclude** the specified apps from being proxied. For example, `user_packages_list=("0:com.android.captiveportallogin" "10:com.tencent.mm")` excludes the CaptivePortalLogin app for user 0 and WeChat for user 10.
-
-- If you want to only proxy certain applications (APPs), open the `/data/adb/box/scripts/box.config` file, change the `proxy_mode` value to `whitelist`, and add elements to the `user_packages_list` array. The format for each element is `android_user:package_name`, separated by spaces. This will **only proxy** the specified apps. For example, `user_packages_list=("0:com.termux" "10:org.telegram.messenger")` proxies Termux for user 0 and Telegram for user 10.
-
-- When the `proxy_mode` value is `core`, the transparent proxy will not work, and **only** the core will be started, which can be used to support native TUN inbound of some cores (sing-box, clash, mihomo).
+Set `PROXY_MODE=core`. Transparent proxy rules will not be loaded, and only the core will be started (applicable to TUN inbounds of sing-box/clash/mihomo).
 
 ### Advanced Usage
 
-#### Changing Proxy Mode
+- **Force REDIRECT mode**: `PROXY_MODE=REDIRECT` (UDP will not be proxied unless the core enables TUN).
+- **Proxy hotspot traffic**: `PROXY_HOTSPOT=1` (requires correct `HOTSPOT_INTERFACE` setting; MAC filtering becomes effective and can be used to control proxying of connected hotspot devices).
+- **Per-process GID traffic splitting**: Enable `GID_PROXY_ENABLE=1` and use `PROXY_GIDS_LIST` or `BYPASS_GIDS_LIST`.
 
-- Box uses TPROXY transparent proxy for TCP + UDP by default. If the device does not support TPROXY, it will automatically use REDIRECT to proxy TCP only.
+### Manual Mode
 
-- Open the `/data/adb/box/scripts/box.config` file, and change the `proxy_method` value to `REDIRECT` or `MIXED` to use REDIRECT to proxy TCP. If TUN is not enabled in the core (only Sing-box, Clash, Mihomo supports TUN), UDP will not be proxied.
-
-#### Changing the User to Run the Box Service
-
-- Box runs with the `root:net_admin` user group by default.
-
-- Open the `/data/adb/box/scripts/box.config` file and change the `box_user_group` value to an existing `UID:GID` on the device. In this case, the core used by Box must be in the `/system/bin/` directory (can use Magisk) and requires the `setcap` binary, which is included in [libcap](https://android.googlesource.com/platform/external/libcap/).
-
-#### Bypassing Transparent Proxy when Connecting to WLAN or Enabling Hotspot
-
-- Box proxies the local device, hotspot, and USB tethering by default.
-
-- Open the `/data/adb/box/scripts/box.config` file, and add the `wlan+` element to the `ignore_out_list` array to bypass WLAN in transparent proxy, leaving the hotspot unaffected.
-
-- Open the `/data/adb/box/scripts/box.config` file and remove the `wlan+` element from the `ap_list` array to stop proxying the hotspot (MediaTek devices may use `ap+` instead of `wlan+`, which can be checked with the `ifconfig` command).
-
-#### Transparent Proxy for Specific Processes
-
-- Box proxies all processes by default.
-
-- If you want Box to proxy all processes except certain ones, open the `/data/adb/box/scripts/box.config` file, change the `proxy_mode` value to `blacklist` (default value), and add GID elements to the `gid_list` array, separated by spaces. This will **exclude** the specified GID processes from being proxied.
-
-- If you want to only proxy specific processes, open the `/data/adb/box/scripts/box.config` file, change the `proxy_mode` value to `whitelist`, and add GID elements to the `gid_list` array, separated by spaces. This will **only proxy** the specified GID processes.
-
-> Tip: Since Android's iptables does not support PID extension matching, Box matches processes indirectly by matching GID. Android can use the busybox setuidgid command to start specific processes with a specific UID and any GID.
-
-#### Entering Manual Mode
-
-If you want to control the Box service entirely via command-line, simply create a file `/data/adb/box/manual`. In this case, the Box service will **not start automatically** when your device boots, and you won't be able to manage the Box service's start or stop via Magisk Manager or KernelSU Manager apps.
-
-##### Managing Service Start and Stop
-
-- The Box service script is `/data/adb/box/scripts/box.service`.
-
-- For example, in the test environment (Magisk version: 25200):
-
-  - Start the service:
-
-    `/data/adb/box/scripts/box.service start`
-
-  - Stop the service:
-
-    `/data/adb/box/scripts/box.service stop`
-
-  - Restart the service:
-
-    `/data/adb/box/scripts/box.service restart`
-
-  - Show status:
-
-    `/data/adb/box/scripts/box.service status`
-  
-##### Managing Whether the Transparent Proxy is Enabled
-
-- The transparent proxy script is `/data/adb/box/scripts/box.tproxy`.
-
-- For example, in the test environment (Magisk version: 25200):
-
-  - Enable the transparent proxy:
-
-    `/data/adb/box/scripts/box.tproxy enable`
-
-  - Disable the transparent proxy:
-
-    `/data/adb/box/scripts/box.tproxy disable`
-
-  - Reload the transparent proxy:
-
-    `/data/adb/box/scripts/box.tproxy renew`
+After creating an empty file `/data/adb/box/manual`:
+- The service will no longer start automatically on boot and cannot be controlled via the Manager.
+- Manual commands:
+  - Service: `/data/adb/box/scripts/box.service start|stop|restart|status`
+  - Transparent proxy: `/data/adb/box/scripts/box.tproxy start|stop|restart`
 
 ## Additional Notes
 
-- When modifying the configuration files for each core, please ensure that the relevant configuration matches the definitions in the `/data/adb/box/scripts/box.config` file.
+- After modifying the core configuration file, ensure consistency with settings such as ports in `box.config`.
+- The module automatically prevents traffic looping (by bypassing local IPs and leveraging the NETFILTER_XT_MATCH_ADDRTYPE feature). However, if the device has a public IP address, it is still recommended to manually add [bypass rules](box/scripts/box.tproxy#L567-L585).
+- Logs are located in the `/data/adb/box/run/` directory.
 
-- ~~Box service can use [yq](https://github.com/mikefarah/yq) [to modify user configuration](box/scripts/box.service#L13-L17).~~
-
-- When the Box service is started for the first time (or using the box.tproxy renew command), the local machine IP will be added to the bypass list to prevent traffic loops. It will also start monitoring and insert local IP anti-loopback rules when network changes occur. However, if the local machine has a **public IP** address, it is still recommended to add the IP to the `intranet` array in the `/data/adb/box/scripts/box.config` file, or you may try [uncommenting these three lines](box/scripts/box.tproxy#L187-L189).
-
-- The logs for the Box service are in the `/data/adb/box/run` directory.
 
 ## Uninstallation
 

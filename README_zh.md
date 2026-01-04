@@ -1,143 +1,128 @@
-# Box4Magisk/KernelSU/APatch
+# Box4Magisk / KernelSU / APatch
 
-[English](README.md)
+[English](README.md) | [中文](README_zh.md)
 
-本项目通过 [Magisk](https://github.com/topjohnwu/Magisk) 、[KernelSU](https://github.com/tiann/KernelSU) 或 [APatch](https://github.com/bmax121/APatch) 部署 clash、mihomo、sing-box、v2ray、xray、hysteria 代理，支持 REDIRECT（仅 TCP）、TPROXY（TCP + UDP）透明代理，支持由核心提供的 TUN（TCP + UDP）代理，也支持 REDIRECT（TCP） + TUN（UDP） 混合模式代理。
+本项目是一个 Magisk / KernelSU / APatch 模块，用于在 Android 设备上部署多种代理核心，包括 **clash**、**mihomo**、**sing-box**、**v2ray**、**xray** 和 **hysteria**。
+
+支持的透明代理模式：
+- **REDIRECT**：仅 TCP
+- **TPROXY**：TCP + UDP（默认优先）
+- **TUN**：TCP + UDP（由核心提供，仅 sing-box、clash、mihomo 支持）
+- **混合模式**：REDIRECT (TCP) + TUN (UDP)
 
 ## 免责声明
 
-本项目不对以下情况负责：设备变砖、SD 卡损坏或 SoC 烧毁。
+本项目不对设备变砖、数据损坏或其他硬件/软件问题负责。
 
-**请确保您的配置文件不会造成流量回环，否则可能会导致您的手机无限重启。**
+**重要警告**：请确保您的配置文件不会导致流量回环，否则可能引起设备无限重启！
 
-如果你真的不知道如何配置这个模块，你可能需要像 ClashForAndroid、sing-box for Android、v2rayNG、surfboard、SagerNet、AnXray 等应用程序。
-
+如果您不熟悉代理配置，建议先使用用户友好的应用（如 ClashForAndroid、sing-box for Android、v2rayNG、SagerNet 等）学习基本概念。
 
 ## 安装
 
-- 从 [Release](https://github.com/CHIZI-0618/box4magisk/releases) 页下载模块压缩包，然后通过 Magisk Manager，KernelSU Manager 或 APatch 安装
-- 支持后续在 Magisk Manager 中在线更新模块（更新后免重启即生效）
-- 更新模块时会备份用户配置，且附加用户配置至新 `/data/adb/box/scripts/box.config` 文件（在 shell 中，后定义的变量值会覆盖之前的定义值，但仍建议更新模块后再次编辑 `box.config` 文件去除重复定义与移除废弃字段）
+1. 从 [Releases](https://github.com/CHIZI-0618/box4magisk/releases) 下载最新模块 ZIP 包。
+2. 在 Magisk Manager、KernelSU Manager 或 APatch Manager 中安装。
+3. 支持在线更新（更新后无需重启即可生效）。
+4. 更新模块时会自动备份用户配置，并合并到新版本的 `/data/adb/box/scripts/box.config`（建议更新后检查并清理重复/废弃字段）。
 
-### 注意
+**注意**：模块不包含任何代理核心二进制文件。
 
-模块不包含 [clash](https://github.com/Dreamacro/clash)、[mihomo](https://github.com/MetaCubeX/mihomo)、[sing-box](https://github.com/SagerNet/sing-box)、[v2ray-core](https://github.com/v2fly/v2ray-core)、[Xray-core](https://github.com/XTLS/Xray-core)、[Hysteria](https://github.com/apernet/hysteria) 等二进制可执行文件。
-  
-模块安装完成后请您自行下载设备对应架构的核心文件放置到 `/data/adb/box/bin/` 目录。
-
+安装完成后，请手动下载对应设备架构的核心可执行文件，放置到 `/data/adb/box/bin/` 目录。
 
 ## 配置
 
-- 各核心工作在 `/data/adb/box/核心名字` 目录，核心名字由 `/data/adb/box/scripts/box.config` 文件中 `bin_name` 定义，有效值只有 `clash`、`mihomo`、`sing-box`、`xray`、`v2ray`、`hysteria`，`bin_name` **决定模块启用的核心**
-- 各核心配置文件需用户自定义，模块脚本会检查配置合法性，检查结果存储在 `/data/adb/box/run/check.log` 文件中
-- 提示：`mihomo` 和 `sing-box` 核心自带默认配置已做好配合透明代理脚本工作的准备。建议编辑 `proxy-providers` 或 `outbounds` 部分来添加您的代理服务器，进阶配置请参考相应官方文档。地址：[clash 文档](https://github.com/Dreamacro/clash/wiki/configuration)，[mihomo 文档](https://wiki.metacubex.one)，[sing-box 文档](https://sing-box.sagernet.org/)，[v2ray 文档](https://www.v2fly.org/)，[xray 文档](https://xtls.github.io/)，[Hysteria 文档](https://v2.hysteria.network/)
+### 选择代理核心
 
+核心工作目录：`/data/adb/box/<核心名字>`  
+核心由 `/data/adb/box/scripts/box.config` 中的 `bin_name` 决定，可选值：
+
+- `sing-box`（推荐，默认）
+- `clash`
+- `mihomo`
+- `xray`
+- `v2ray`
+- `hysteria`
+
+**提示**：`mihomo` 和 `sing-box` 自带默认配置文件，已预设好与透明代理配合。建议直接编辑 `proxy-providers` 或 `outbounds` 部分添加您的节点。  
+进阶配置请参考官方文档：
+- [Clash](https://github.com/Dreamacro/clash/wiki/configuration)
+- [Mihomo](https://wiki.metacubex.one)
+- [sing-box](https://sing-box.sagernet.org/)
+- [V2Ray](https://www.v2fly.org/)
+- [Xray](https://xtls.github.io/)
+- [Hysteria](https://v2.hysteria.network/)
+
+模块会自动检查配置文件合法性，结果保存在 `/data/adb/box/run/check.log`。
+
+### box.config 主要配置项说明
+
+以下是 `/data/adb/box/scripts/box.config` 的关键选项。这些选项支持灵活组合，例如您可以选择仅代理移动数据和 WiFi，而不代理热点和 USB 共享。网络接口代理支持任意组合搭配（如仅代理 WiFi + 热点，或仅代理移动数据 + USB），但必须正确配置对应的 `*_INTERFACE` 变量（例如 `MOBILE_INTERFACE="rmnet_data+"`、`WIFI_INTERFACE="wlan0"`、`HOTSPOT_INTERFACE="wlan2"`、`USB_INTERFACE="rndis+"`），以匹配设备实际接口名（可用 `ifconfig` 或 `ip link` 检查）。
+
+| 配置项                  | 默认值          | 说明 |
+|-------------------------|-----------------|------|
+| `bin_name`             | `sing-box`     | 选择启用的代理核心（决定模块行为） |
+| `CORE_USER_GROUP`      | `root:net_admin` | 核心运行的用户组（高级用户可修改为自定义 UID:GID，需要 setcap 支持） |
+| `PROXY_TCP_PORT` / `PROXY_UDP_PORT` | `1536` | 透明代理监听端口 |
+| `PROXY_MODE`           | `auto`         | 代理模式：`auto`（优先 TPROXY）、`TPROXY`、`REDIRECT`、`core`（仅启动核心，支持原生 TUN） |
+| `DNS_HIJACK_ENABLE`    | `1`            | DNS 劫持（0=禁用，1=启用 TPROXY，2=启用 REDIRECT，非必要无需改动） |
+| `DNS_PORT`             | `1053`         | DNS 监听端口 |
+| `MOBILE_INTERFACE`     | `rmnet_data+`  | 移动数据接口名 |
+| `WIFI_INTERFACE`       | `wlan0`        | WiFi 接口名 |
+| `HOTSPOT_INTERFACE`    | `wlan2`        | 热点接口名 |
+| `USB_INTERFACE`        | `rndis+`       | USB 共享接口名 |
+| `PROXY_MOBILE`         | `1`            | 是否代理移动数据流量（1=代理，0=不代理；支持与其他接口任意组合） |
+| `PROXY_WIFI`           | `1`            | 是否代理 WiFi 流量（1=代理，0=不代理；支持与其他接口任意组合） |
+| `PROXY_HOTSPOT`        | `0`            | 是否代理热点流量（1=代理，0=不代理；支持与其他接口任意组合；启用时 MAC 过滤生效） |
+| `PROXY_USB`            | `0`            | 是否代理 USB 共享流量（1=代理，0=不代理；支持与其他接口任意组合） |
+| `PROXY_TCP` / `PROXY_UDP` | `1` / `1` | 是否代理 TCP/UDP（1=代理，0=不代理） |
+| `PROXY_IPV6`           | `0`            | 是否代理 IPv6（1=代理，0=禁用；在 REDIRECT 模式下，模块会自动检查内核对 `IP6_NF_NAT` 和 `IP6_NF_TARGET_REDIRECT` 的支持，若不支持则 IPv6 代理将失效） |
+| `APP_PROXY_ENABLE`     | `0`            | 启用按应用代理（1=启用） |
+| `APP_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定应用）或 `whitelist`（仅代理指定应用） |
+| `BYPASS_APPS_LIST` / `PROXY_APPS_LIST` | 空 | 应用列表，格式：`"用户ID:包名"`（多条用空格分隔，例如 `"0:com.android.systemui" "10:com.tencent.mm"`） |
+| `GID_PROXY_ENABLE`     | `0`            | 启用按进程 GID 代理（高级） |
+| `GID_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定 GID）或 `whitelist`（仅代理指定 GID） |
+| `BYPASS_GIDS_LIST` / `PROXY_GIDS_LIST` | 空 | GID 列表（多条用空格分隔） |
+| `BYPASS_CN_IP`         | `0`            | 是否绕过中国大陆 IP（1=启用，0=禁用；需要内核支持 `ipset`，模块会自动检查支持情况，若不支持则功能失效；启用后会从指定 URL 下载 IP 列表） |
+| `MAC_FILTER_ENABLE`    | `0`            | 启用 MAC 地址过滤（1=启用，0=禁用；仅在热点模式 `PROXY_HOTSPOT=1` 下生效） |
+| `MAC_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定 MAC）或 `whitelist`（仅代理指定 MAC） |
+| `BYPASS_MACS_LIST` / `PROXY_MACS_LIST` | 空 | MAC 地址列表（多条用空格分隔，例如 `"AA:BB:CC:DD:EE:FF" "11:22:33:44:55:66"`） |
 
 ## 使用方法
 
-### 常规方法（默认 & 推荐方法）
+### 常规使用（推荐）
 
-#### 管理服务的启停
+- 服务默认开机自启。
+- 通过 Magisk / KernelSU / APatch Manager **启用/禁用模块** 即可实时启停服务（无需重启设备）。
 
-**以下核心服务统称 Box**
+#### 按应用代理（分流）
 
-- Box 服务默认会在系统启动后自动运行
-- 您可以通过 Magisk Manager 应用打开或关闭模块**实时**启动或停止 Box 服务，**不需要重启您的设备**。启动服务可能需要等待几秒钟，停止服务可能会立即生效
+启用 `APP_PROXY_ENABLE=1` 后：
+- **黑名单模式**（默认）：代理所有应用，除指定列表（用 `BYPASS_APPS_LIST`）。
+- **白名单模式**：仅代理指定列表（用 `PROXY_APPS_LIST`，设置 `APP_PROXY_MODE=whitelist`）。
 
-#### 选择需要代理的应用程序（APP）
+#### 仅使用核心原生 TUN（不透明代理）
 
-- Box 默认代理所有安卓用户的所有应用程序（APP）
-
-- 如果您希望 Box 代理所有应用程序（APP），除了某些特定的应用，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `APP_PROXY_ENABLE` 的值为 `1`，修改 `APP_PROXY_MODE` 的值为 `blacklist`（默认值），修改 `BYPASS_APPS_LIST` 变量值，格式为多个`安卓用户:应用包名`，之间用空格隔开。即可**不代理**相应安卓用户应用。例如 `BYPASS_APPS_LIST="0:com.android.captiveportallogin" "10:com.tencent.mm"` 代表不代理用户 0 的 CaptivePortalLogin 和用户 10 的 Wechat
-
-- 如果您希望只对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `APP_PROXY_ENABLE` 的值为 `1`，修改 `APP_PROXY_MODE` 的值为 `whitelist`，修改 `PROXY_APPS_LIST` 变量值，格式为多个`安卓用户:应用包名`，之间用空格隔开。即可**仅代理**相应安卓用户应用。例如 `PROXY_APPS_LIST="0:com.termux" "10:org.telegram.messenger"` 代表代理用户 0 的 Termux 和用户 10 的 Telegram
-
-- `PROXY_MODE` 的值为 `core` 时，透明代理不会工作，**仅仅**启动相应核心，这可以用来支持部分核心（sing-box、clash、mihomo）原生的 TUN 入站
+设置 `PROXY_MODE=core`，透明代理规则将不加载，仅启动核心（适用于 sing-box/clash/mihomo 的 TUN 入站）。
 
 ### 高级用法
 
-#### 更改代理模式
+- **强制 REDIRECT 模式**：`PROXY_MODE=REDIRECT`（UDP 不代理，除非核心启用 TUN）。
+- **代理热点**：`PROXY_HOTSPOT=1`（需正确设置 `HOTSPOT_INTERFACE`；此时 MAC 过滤生效，可用于控制热点连接设备的代理）。
+- **按进程 GID 分流**：启用 `GID_PROXY_ENABLE=1`，使用 `PROXY_GIDS_LIST` 或 `BYPASS_GIDS_LIST`。
 
-- Box 默认使用 TPROXY 透明代理 TCP + UDP，若检测到设备不支持 TPROXY，则自动使用 REDIRECT 仅代理 TCP
+### 手动模式
 
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `PROXY_MODE` 的值为 `REDIRECT` 则使用 REDIRECT 代理 TCP，在核心（仅 sing-box、clash、mihomo支持 TUN）没有启用 TUN 时 UDP 不会被代理
+创建空文件 `/data/adb/box/manual` 后：
+- 服务不再开机自启，也无法通过 Manager 控制。
+- 手动命令：
+  - 服务：`/data/adb/box/scripts/box.service start|stop|restart|status`
+  - 透明代理：`/data/adb/box/scripts/box.tproxy start|stop|restart`
 
-#### 更改启动 Box 服务的用户
-
-- Box 默认使用 `root:net_admin` 用户用户组启动
-
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `CORE_USER_GROUP` 的值为设备中已存在的 `UID:GID`，此时 Box 使用的核心必须在 `/system/bin/` 目录中（可以使用 Magisk），且需要 `setcap` 二进制可执行文件，它被包含在 [libcap](https://android.googlesource.com/platform/external/libcap/) 中
-
-#### 连接到 WLAN 或开热点时绕过透明代理
-
-- Box 默认透明代理本机数据流量、本机 WiFi 网络的 TCP与 UDP
-
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `PROXY_HOTSPOT` 的值为 `1`，则透明代理热点，需正确配置 `HOTSPOT_INTERFACE`
-
-#### 特定进程的透明代理
-
-- Box 默认透明代理所有进程
-
-- 如果您希望 Box 代理所有进程，除了某些特定的进程，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `GID_PROXY_ENABLE` 的值为 `1`，修改 `GID_PROXY_MODE` 的值为 `blacklist`（默认值），修改 `BYPASS_GIDS_LIST` 变量添加 GID，GID 之间用空格隔开。即可**不代理**相应 GID 的进程
-
-- 如果您希望只对特定的进程进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `GID_PROXY_ENABLE` 的值为 `1`，修改 `GID_PROXY_MODE` 的值为 `whitelist`，修改 `PROXY_GIDS_LIST` 变量添加 GID，GID 之间用空格隔开。即可**仅代理**相应 GID 进程
-
-> 小贴士：因为安卓 iptables 不支持 PID 扩展匹配，所以 Box 匹配进程是通过匹配 GID 间接达到的。安卓可以使用 busybox setuidgid 命令使用特定 UID 任意 GID 启动特定进程
-
-#### 进入手动模式
-
-如果您希望完全通过运行命令来控制 Box 服务，只需新建一个文件 `/data/adb/box/manual`。在这种情况下，Box 服务不会在您的设备启动时**自动启动**，您也不能通过 Magisk Manager 或 KernelSU Manager 应用管理 Box 服务的启动或停止。
-
-##### 管理服务的启停
-
-- Box 服务脚本是 `/data/adb/box/scripts/box.service`
-
-- 例如，在测试环境中（Magisk version: 25200）
-
-  - 启动服务：
-
-    `/data/adb/box/scripts/box.service start`
-
-  - 停止服务：
-
-    `/data/adb/box/scripts/box.service stop`
-
-  - 重启服务：
-
-    `/data/adb/box/scripts/box.service restart`
-
-  - 显示状态：
-
-    `/data/adb/box/scripts/box.service status`
-  
-##### 管理透明代理是否启用
-
-- 透明代理脚本是 `/data/adb/box/scripts/box.tproxy`
-
-- 例如，在测试环境中（Magisk version: 25200）
-
-  - 启用透明代理：
-
-    `/data/adb/box/scripts/box.tproxy start`
-
-  - 停用透明代理：
-
-    `/data/adb/box/scripts/box.tproxy stop`
-
-  - 重载透明代理：
-
-    `/data/adb/box/scripts/box.tproxy restart`
-  
 ## 其他说明
 
-- 修改各核心配置文件时请保证相关配置与 `/data/adb/box/scripts/box.config` 文件中的定义一致
-  
-- ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L13-L17)~~
-
-- Box 服务启动透明代理时，会检查内核 `NETFILTER_XT_MATCH_ADDRTYPE` 的支持情况，用来绕过本机，并将本机 IP 加入绕过列表防止流量环路，且会启动监听，网络变化则插入本地 IP 防回环规则，但仍建议如本机存在**公网 IP** 地址请将 IP 添加[这里](box/scripts/box.tproxy#L567-L585)
-
-- Box 服务的日志在 `/data/adb/box/run` 目录
-
+- 修改核心配置文件后，请确保与 `box.config` 中的端口等设置一致。
+- 模块会自动防回环（绕过本地 IP 并利用 NETFILTER_XT_MATCH_ADDRTYPE 特性），但若设备有公网 IP，仍建议手动添加[绕过规则](box/scripts/box.tproxy#L567-L585)。
+- 日志位于 `/data/adb/box/run/` 目录。
 
 ## 卸载
 
