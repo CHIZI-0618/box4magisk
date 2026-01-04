@@ -48,11 +48,11 @@
 
 - Box 默认代理所有安卓用户的所有应用程序（APP）
 
-- 如果您希望 Box 代理所有应用程序（APP），除了某些特定的应用，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `blacklist`（默认值），在 `user_packages_list` 数组中添加元素，数组元素格式为`安卓用户:应用包名`，元素之间用空格隔开。即可**不代理**相应安卓用户应用。例如 `user_packages_list=("0:com.android.captiveportallogin" "10:com.tencent.mm")` 代表不代理用户 0 的 CaptivePortalLogin 和用户 10 的 Wechat
+- 如果您希望 Box 代理所有应用程序（APP），除了某些特定的应用，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `APP_PROXY_ENABLE` 的值为 `1`，修改 `APP_PROXY_MODE` 的值为 `blacklist`（默认值），修改 `BYPASS_APPS_LIST` 变量值，格式为多个`安卓用户:应用包名`，之间用空格隔开。即可**不代理**相应安卓用户应用。例如 `BYPASS_APPS_LIST="0:com.android.captiveportallogin" "10:com.tencent.mm"` 代表不代理用户 0 的 CaptivePortalLogin 和用户 10 的 Wechat
 
-- 如果您希望只对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `user_packages_list` 数组中添加元素，数组元素格式为`安卓用户:应用包名`，元素之间用空格隔开。即可**仅代理**相应安卓用户应用。例如 `user_packages_list=("0:com.termux" "10:org.telegram.messenger")` 代表代理用户 0 的 Termux 和用户 10 的 Telegram
+- 如果您希望只对特定的应用程序（APP）进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `APP_PROXY_ENABLE` 的值为 `1`，修改 `APP_PROXY_MODE` 的值为 `whitelist`，修改 `PROXY_APPS_LIST` 变量值，格式为多个`安卓用户:应用包名`，之间用空格隔开。即可**仅代理**相应安卓用户应用。例如 `PROXY_APPS_LIST="0:com.termux" "10:org.telegram.messenger"` 代表代理用户 0 的 Termux 和用户 10 的 Telegram
 
-- `proxy_mode` 的值为 `core` 时，透明代理不会工作，**仅仅**启动相应核心，这可以用来支持部分核心（sing-box、clash、mihomo）原生的 TUN 入站
+- `PROXY_MODE` 的值为 `core` 时，透明代理不会工作，**仅仅**启动相应核心，这可以用来支持部分核心（sing-box、clash、mihomo）原生的 TUN 入站
 
 ### 高级用法
 
@@ -60,29 +60,27 @@
 
 - Box 默认使用 TPROXY 透明代理 TCP + UDP，若检测到设备不支持 TPROXY，则自动使用 REDIRECT 仅代理 TCP
 
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_method` 的值为 `REDIRECT` 或 `MIXED` 则使用 REDIRECT 代理 TCP，在核心（仅 sing-box、clash、mihomo支持 TUN）没有启用 TUN 时 UDP 不会被代理
+- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `PROXY_MODE` 的值为 `REDIRECT` 则使用 REDIRECT 代理 TCP，在核心（仅 sing-box、clash、mihomo支持 TUN）没有启用 TUN 时 UDP 不会被代理
 
 #### 更改启动 Box 服务的用户
 
 - Box 默认使用 `root:net_admin` 用户用户组启动
 
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `box_user_group` 的值为设备中已存在的 `UID:GID`，此时 Box 使用的核心必须在 `/system/bin/` 目录中（可以使用 Magisk），且需要 `setcap` 二进制可执行文件，它被包含在 [libcap](https://android.googlesource.com/platform/external/libcap/) 中
+- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `CORE_USER_GROUP` 的值为设备中已存在的 `UID:GID`，此时 Box 使用的核心必须在 `/system/bin/` 目录中（可以使用 Magisk），且需要 `setcap` 二进制可执行文件，它被包含在 [libcap](https://android.googlesource.com/platform/external/libcap/) 中
 
 #### 连接到 WLAN 或开热点时绕过透明代理
 
-- Box 默认透明代理本机、热点、USB 网络共享
+- Box 默认透明代理本机数据流量、本机 WiFi 网络的 TCP与 UDP
 
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `ignore_out_list` 数组添加 `wlan+` 元素则透明代理绕过 WLAN，热点不受影响
-
-- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `ap_list` 数组删除 `wlan+` 元素则不透明代理热点（联发科机型可能为 `ap+` 而非 `wlan+`，可使用 ifconfig 命令查看）
+- 打开 `/data/adb/box/scripts/box.config` 文件，修改 `PROXY_HOTSPOT` 的值为 `1`，则透明代理热点，需正确配置 `HOTSPOT_INTERFACE`
 
 #### 特定进程的透明代理
 
 - Box 默认透明代理所有进程
 
-- 如果您希望 Box 代理所有进程，除了某些特定的进程，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `blacklist`（默认值），在 `gid_list` 数组中添加 GID 元素，GID 之间用空格隔开。即可**不代理**相应 GID 的进程
+- 如果您希望 Box 代理所有进程，除了某些特定的进程，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `GID_PROXY_ENABLE` 的值为 `1`，修改 `GID_PROXY_MODE` 的值为 `blacklist`（默认值），修改 `BYPASS_GIDS_LIST` 变量添加 GID，GID 之间用空格隔开。即可**不代理**相应 GID 的进程
 
-- 如果您希望只对特定的进程进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `proxy_mode` 的值为 `whitelist`，在 `gid_list` 数组中添加 GID 元素，GID 之间用空格隔开。即可**仅代理**相应 GID 进程
+- 如果您希望只对特定的进程进行透明代理，那么请打开 `/data/adb/box/scripts/box.config` 文件，修改 `GID_PROXY_ENABLE` 的值为 `1`，修改 `GID_PROXY_MODE` 的值为 `whitelist`，修改 `PROXY_GIDS_LIST` 变量添加 GID，GID 之间用空格隔开。即可**仅代理**相应 GID 进程
 
 > 小贴士：因为安卓 iptables 不支持 PID 扩展匹配，所以 Box 匹配进程是通过匹配 GID 间接达到的。安卓可以使用 busybox setuidgid 命令使用特定 UID 任意 GID 启动特定进程
 
@@ -120,15 +118,15 @@
 
   - 启用透明代理：
 
-    `/data/adb/box/scripts/box.tproxy enable`
+    `/data/adb/box/scripts/box.tproxy start`
 
   - 停用透明代理：
 
-    `/data/adb/box/scripts/box.tproxy disable`
+    `/data/adb/box/scripts/box.tproxy stop`
 
   - 重载透明代理：
 
-    `/data/adb/box/scripts/box.tproxy renew`
+    `/data/adb/box/scripts/box.tproxy restart`
   
 ## 其他说明
 
@@ -136,7 +134,7 @@
   
 - ~~Box 服务可使用 [yq](https://github.com/mikefarah/yq) [修改用户配置](box/scripts/box.service#L13-L17)~~
 
-- Box 服务初次启动时（或使用 box.tproxy renew 命令）会将本机 IP 加入绕过列表防止流量环路，且会启动监听，网络变化则插入本地 IP 防回环规则，但仍建议如本机存在**公网 IP** 地址请将 IP 添加至 `/data/adb/box/scripts/box.config` 文件中的 `intranet` 数组中，或许可尝试 [取消此三行注释](box/scripts/box.tproxy#L187-L189)
+- Box 服务启动透明代理时，会检查内核 `NETFILTER_XT_MATCH_ADDRTYPE` 的支持情况，用来绕过本机，并将本机 IP 加入绕过列表防止流量环路，且会启动监听，网络变化则插入本地 IP 防回环规则，但仍建议如本机存在**公网 IP** 地址请将 IP 添加[这里](box/scripts/box.tproxy#L567-L585)
 
 - Box 服务的日志在 `/data/adb/box/run` 目录
 
