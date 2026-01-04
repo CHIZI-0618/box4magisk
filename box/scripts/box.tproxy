@@ -150,7 +150,7 @@ check_dependencies() {
     export PATH="$PATH:/data/data/com.termux/files/usr/bin"
 
     local missing=""
-    local required_commands="curl ip ipset iptables"
+    local required_commands="curl ip iptables"
     local cmd
 
     for cmd in $required_commands; do
