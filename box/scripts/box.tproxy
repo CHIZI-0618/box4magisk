@@ -20,7 +20,7 @@ log() {
     local color_code
 
     export TZ=Asia/Shanghai
-    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+	timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
 
     case "$level" in
         Debug) color_code="\033[0;36m" ;;
@@ -33,10 +33,10 @@ log() {
             ;;
     esac
 
-    if [ -t 1 ]; then
-        printf "%b\n" "${color_code}${timestamp} [${level}]: ${message}\033[0m"
+    if [ -t 2 ]; then
+        printf "%b\n" "${color_code}${timestamp} [${level}]: ${message}\033[0m" >&2
     else
-        printf "%s\n" "${timestamp} [${level}]: ${message}"
+        printf "%s\n" "${timestamp} [${level}]: ${message}" >&2
     fi
 }
 
@@ -169,6 +169,11 @@ check_dependencies() {
 check_kernel_feature() {
     if [ "$DRY_RUN" -eq 1 ]; then
         log Debug "[DRY-RUN] Skip kernel feature check for $1"
+        return 0
+    fi
+
+	if [ "$SKIP_CHECK_FEATURE" = "1" ]; then
+        log Debug "Kernel feature check skipped"
         return 0
     fi
 
