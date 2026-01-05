@@ -19,22 +19,30 @@ mkdir -p ${box_path}/${bin_name}
 find ${box_path} -mtime +3 -type f -name "*.log" | xargs rm -f
 
 log() {
+    local level="$1"
+    local message="$2"
+    local timestamp
+    local color_code
+
     export TZ=Asia/Shanghai
-    now=$(date +"[%Y-%m-%d %H:%M:%S %Z]")
-    case $1 in
-        Info)
-            [ -t 1 ] && echo -e "\033[1;32m${now} [Info]: $2\033[0m" || echo "${now} [Info]: $2"
-            ;;
-        Warn)
-            [ -t 1 ] && echo -e "\033[1;33m${now} [Warn]: $2\033[0m" || echo "${now} [Warn]: $2"
-            ;;
-        Error)
-            [ -t 1 ] && echo -e "\033[1;31m${now} [Error]: $2\033[0m" || echo "${now} [Error]: $2"
-            ;;
+    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+
+    case "$level" in
+        Debug) color_code="\033[0;36m" ;;
+        Info) color_code="\033[1;32m" ;;
+        Warn) color_code="\033[1;33m" ;;
+        Error) color_code="\033[1;31m" ;;
         *)
-            [ -t 1 ] && echo -e "\033[1;30m${now} [$1]: $2\033[0m" || echo "${now} [$1]: $2"
+            level="Unknown"
+            color_code="\033[0m"
             ;;
     esac
+
+    if [ -t 2 ]; then
+        printf "%b\n" "${color_code}${timestamp} [${level}]: ${message}\033[0m" >&2
+    else
+        printf "%s\n" "${timestamp} [${level}]: ${message}" >&2
+    fi
 }
 
 check_permission() {
