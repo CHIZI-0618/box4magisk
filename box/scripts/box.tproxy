@@ -20,7 +20,7 @@ log() {
     local color_code
 
     export TZ=Asia/Shanghai
-	timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
 
     case "$level" in
         Debug) color_code="\033[0;36m" ;;
@@ -42,7 +42,7 @@ log() {
 
 load_config() {
     CONFIG_FILE=${scripts_dir}/box.config
-    
+
     if [ ! -f "$CONFIG_FILE" ]; then
         log Error "Configuration file not found: '$CONFIG_FILE'"
         exit 1
@@ -172,7 +172,7 @@ check_kernel_feature() {
         return 0
     fi
 
-	if [ "$SKIP_CHECK_FEATURE" = "1" ]; then
+    if [ "$SKIP_CHECK_FEATURE" = "1" ]; then
         log Debug "Kernel feature check skipped"
         return 0
     fi
@@ -555,7 +555,7 @@ setup_proxy_chain() {
     $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "BYPASS_IP$suffix"
     $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "BYPASS_INTERFACE$suffix"
     $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "APP_CHAIN$suffix"
-	$cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "GID_CHAIN$suffix"
+    $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "GID_CHAIN$suffix"
     $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "DNS_HIJACK_OUT$suffix"
 
     if check_kernel_feature "NETFILTER_XT_MATCH_ADDRTYPE"; then
@@ -734,7 +734,7 @@ setup_proxy_chain() {
         fi
     fi
 
-	if [ "$GID_PROXY_ENABLE" -eq 1 ]; then
+    if [ "$GID_PROXY_ENABLE" -eq 1 ]; then
         if check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
             log Info "Setting up GID filter rules in $GID_PROXY_MODE mode"
             case "$GID_PROXY_MODE" in
@@ -978,7 +978,7 @@ cleanup_chain() {
     $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "BYPASS_IP$suffix" 2> /dev/null || true
     $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "BYPASS_INTERFACE$suffix" 2> /dev/null || true
     $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "APP_CHAIN$suffix" 2> /dev/null || true
-	$cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "GID_CHAIN$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "GID_CHAIN$suffix" 2> /dev/null || true
     $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "DNS_HIJACK_OUT$suffix" 2> /dev/null || true
 
     if [ "$PROXY_TCP" -eq 1 ]; then
@@ -1194,7 +1194,7 @@ parse_args() {
             --dry-run)
                 DRY_RUN=1
                 ;;
-            -h|--help)
+            -h | --help)
                 show_usage
                 exit 0
                 ;;
