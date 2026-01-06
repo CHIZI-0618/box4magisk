@@ -1,573 +1,1305 @@
 #!/system/bin/sh
 
-export PATH="/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:$PATH:/data/data/com.termux/files/usr/bin"
-
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 
-source ${scripts_dir}/box.config
-mark_id="16777216/16777216"
-table_id="2024"
-# routing_mark="233"
+# Mark values
+MARK_VALUE=20
+MARK_VALUE6=25
+
+# Routing table ID
+TABLE_ID=2025
+
+# Proxy traffic mark
+ROUTING_MARK=""
 
 log() {
-  export TZ=Asia/Shanghai
-  now=$(date +"[%Y-%m-%d %H:%M:%S %Z]")
-  case $1 in
-    Info)
-      [ -t 1 ] && echo -e "\033[1;32m${now} [Info]: $2\033[0m" || echo "${now} [Info]: $2"
-      ;;
-    Warn)
-      [ -t 1 ] && echo -e "\033[1;33m${now} [Warn]: $2\033[0m" || echo "${now} [Warn]: $2"
-      ;;
-    Error)
-      [ -t 1 ] && echo -e "\033[1;31m${now} [Error]: $2\033[0m" || echo "${now} [Error]: $2"
-      ;;
-    *)
-      [ -t 1 ] && echo -e "\033[1;30m${now} [$1]: $2\033[0m" || echo "${now} [$1]: $2"
-      ;;
-  esac
+    local level="$1"
+    local message="$2"
+    local timestamp
+    local color_code
+
+    export TZ=Asia/Shanghai
+    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+
+    case "$level" in
+        Debug) color_code="\033[0;36m" ;;
+        Info) color_code="\033[1;32m" ;;
+        Warn) color_code="\033[1;33m" ;;
+        Error) color_code="\033[1;31m" ;;
+        *)
+            level="Unknown"
+            color_code="\033[0m"
+            ;;
+    esac
+
+    if [ -t 2 ]; then
+        printf "%b\n" "${color_code}${timestamp} [${level}]: ${message}\033[0m" >&2
+    else
+        printf "%s\n" "${timestamp} [${level}]: ${message}" >&2
+    fi
 }
 
-uid_list=()
+load_config() {
+    CONFIG_FILE=${scripts_dir}/box.config
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log Error "Configuration file not found: '$CONFIG_FILE'"
+        exit 1
+    fi
+
+    source $CONFIG_FILE
+}
+
+validate_config() {
+    log Debug "Validating configuration..."
+
+    if ! echo "$PROXY_TCP_PORT" | grep -E '^[0-9]+$' > /dev/null || [ "$PROXY_TCP_PORT" -lt 1 ] || [ "$PROXY_TCP_PORT" -gt 65535 ]; then
+        log Error "Invalid PROXY_TCP_PORT: $PROXY_TCP_PORT"
+        return 1
+    fi
+
+    if ! echo "$PROXY_UDP_PORT" | grep -E '^[0-9]+$' > /dev/null || [ "$PROXY_UDP_PORT" -lt 1 ] || [ "$PROXY_UDP_PORT" -gt 65535 ]; then
+        log Error "Invalid PROXY_UDP_PORT: $PROXY_UDP_PORT"
+        return 1
+    fi
+
+    if ! echo "$DNS_HIJACK_ENABLE" | grep -E '^[0-2]$' > /dev/null; then
+        log Error "Invalid DNS_HIJACK_ENABLE: $DNS_HIJACK_ENABLE (must be 0=disabled, 1=tproxy, 2=redirect)"
+        return 1
+    fi
+
+    if ! echo "$DNS_PORT" | grep -E '^[0-9]+$' > /dev/null || [ "$DNS_PORT" -lt 1 ] || [ "$DNS_PORT" -gt 65535 ]; then
+        log Error "Invalid DNS_PORT: $DNS_PORT"
+        return 1
+    fi
+
+    if ! echo "$MARK_VALUE" | grep -E '^[0-9]+$' > /dev/null || [ "$MARK_VALUE" -lt 1 ] || [ "$MARK_VALUE" -gt 2147483647 ]; then
+        log Error "Invalid MARK_VALUE: $MARK_VALUE"
+        return 1
+    fi
+
+    if ! echo "$MARK_VALUE6" | grep -E '^[0-9]+$' > /dev/null || [ "$MARK_VALUE6" -lt 1 ] || [ "$MARK_VALUE6" -gt 2147483647 ]; then
+        log Error "Invalid MARK_VALUE6: $MARK_VALUE6"
+        return 1
+    fi
+
+    if ! echo "$TABLE_ID" | grep -E '^[0-9]+$' > /dev/null || [ "$TABLE_ID" -lt 1 ] || [ "$TABLE_ID" -gt 65535 ]; then
+        log Error "Invalid TABLE_ID: $TABLE_ID"
+        return 1
+    fi
+
+    case "$CORE_USER_GROUP" in
+        *:*)
+            CORE_USER=$(echo "$CORE_USER_GROUP" | cut -d: -f1)
+            CORE_GROUP=$(echo "$CORE_USER_GROUP" | cut -d: -f2)
+            log Debug "Parsed user:group as '$CORE_USER:$CORE_GROUP'"
+            ;;
+        *)
+            CORE_USER="root"
+            CORE_GROUP="net_admin"
+            log Debug "Using default user:group '$CORE_USER:$CORE_GROUP'"
+            ;;
+    esac
+
+    if [ -z "$CORE_USER" ] || [ -z "$CORE_GROUP" ]; then
+        log Warn "Empty user or group detected, using defaults"
+        CORE_USER="root"
+        CORE_GROUP="net_admin"
+    fi
+
+    log Info "Final user:group configuration: '$CORE_USER:$CORE_GROUP'"
+
+    case "$APP_PROXY_MODE" in
+        blacklist | whitelist) ;;
+        *)
+            log Error "Invalid APP_PROXY_MODE: $APP_PROXY_MODE"
+            return 1
+            ;;
+    esac
+
+    case "$MAC_PROXY_MODE" in
+        blacklist | whitelist) ;;
+        *)
+            log Error "Invalid MAC_PROXY_MODE: $MAC_PROXY_MODE"
+            return 1
+            ;;
+    esac
+
+    log Debug "Configuration validation passed"
+    return 0
+}
+
+check_root() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] Skip root check"
+        return 0
+    fi
+    if [ "$(id -u 2> /dev/null || echo 1)" != "0" ]; then
+        log Error "Must run with root privileges"
+        exit 1
+    fi
+}
+
+check_dependencies() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] Skip dependency check"
+        return 0
+    fi
+
+    export PATH="$PATH:/data/data/com.termux/files/usr/bin"
+
+    local missing=""
+    local required_commands="curl ip iptables"
+    local cmd
+
+    for cmd in $required_commands; do
+        if ! command -v "$cmd" > /dev/null 2>&1; then
+            missing="$missing $cmd"
+        fi
+    done
+
+    if [ -n "$missing" ]; then
+        log Error "Missing required commands: $missing"
+        log Info "Check PATH: $PATH"
+        exit 1
+    fi
+}
+
+check_kernel_feature() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] Skip kernel feature check for $1"
+        return 0
+    fi
+
+    if [ "$SKIP_CHECK_FEATURE" = "1" ]; then
+        log Debug "Kernel feature check skipped"
+        return 0
+    fi
+
+    local feature="$1"
+    local config_name="CONFIG_${feature}"
+
+    if [ -f /proc/config.gz ]; then
+        if zcat /proc/config.gz 2> /dev/null | grep -qE "^${config_name}=[ym]$"; then
+            log Debug "Kernel feature $feature is enabled"
+            return 0
+        else
+            log Debug "Kernel feature $feature is disabled or not found"
+            return 1
+        fi
+    else
+        log Debug "Cannot check kernel feature $feature: /proc/config.gz not available"
+        return 1
+    fi
+}
+
+check_tproxy_support() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] TPROXY support check skipped"
+        return 0
+    fi
+
+    if check_kernel_feature "NETFILTER_XT_TARGET_TPROXY"; then
+        log Debug "Kernel TPROXY support confirmed"
+        return 0
+    else
+        log Debug "Kernel TPROXY support not available"
+        return 1
+    fi
+}
+
+# Unified command wrapper functions
+run_ipt_command() {
+    local cmd="$1"
+    shift
+    local args="$*"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] $cmd $args"
+        return 0
+    else
+        command $cmd -w 100 $args
+    fi
+}
+
+iptables() {
+    run_ipt_command iptables "$@"
+}
+
+ip6tables() {
+    run_ipt_command ip6tables "$@"
+}
+
+ip_rule() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip rule $*"
+        return 0
+    else
+        command ip rule "$@"
+    fi
+}
+
+ip6_rule() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip -6 rule $*"
+        return 0
+    else
+        command ip -6 rule "$@"
+    fi
+}
+
+ip_route() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip route $*"
+        return 0
+    else
+        command ip route "$@"
+    fi
+}
+
+ip6_route() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip -6 route $*"
+        return 0
+    else
+        command ip -6 route "$@"
+    fi
+}
+
+get_package_uid() {
+    local pkg="$1"
+    local line
+    local uid
+    if [ ! -r /data/system/packages.list ]; then
+        log Debug "Cannot read /data/system/packages.list"
+        return 1
+    fi
+    line=$(grep -m1 "^${pkg}[[:space:]]" /data/system/packages.list 2> /dev/null || true)
+    if [ -z "$line" ]; then
+        log Debug "Package not found in packages.list: $pkg"
+        return 1
+    fi
+
+    uid=$(echo "$line" | awk '{print $2}' 2> /dev/null || true)
+    case "$uid" in
+        '' | *[!0-9]*)
+            uid=$(echo "$line" | awk '{print $(NF-1)}' 2> /dev/null || true)
+            ;;
+    esac
+    case "$uid" in
+        '' | *[!0-9]*)
+            log Debug "Invalid UID format for package: $pkg"
+            return 1
+            ;;
+        *)
+            echo "$uid"
+            return 0
+            ;;
+    esac
+}
+
 find_packages_uid() {
-  for user_package in ${user_packages_list[@]} ; do
-    user=$(echo ${user_package} | awk -F ':' '{print $1}')
-    package=$(echo ${user_package} | awk -F ':' '{print $2}')
-    uid="$(awk '{if($1=="'${package}'"){print $2}}' /data/system/packages.list)"
-    if [[ -n "${uid}" ]]; then
-      uid_list[${#uid_list[@]}]=$(expr ${user} \* "100000" + ${uid})
-    fi
-  done
+    local out
+    local token
+    local uid_base
+    local final_uid
+    # shellcheck disable=SC2048
+    for token in $*; do
+        local user_prefix=0
+        local package="$token"
+        case "$token" in
+            *:*)
+                user_prefix=$(echo "$token" | cut -d: -f1)
+                package=$(echo "$token" | cut -d: -f2-)
+                case "$user_prefix" in
+                    '' | *[!0-9]*)
+                        log Warn "Invalid user prefix in token: $token, using 0"
+                        user_prefix=0
+                        ;;
+                esac
+                ;;
+        esac
+        if uid_base=$(get_package_uid "$package" 2> /dev/null); then
+            final_uid=$((user_prefix * 100000 + uid_base))
+            out="$out $final_uid"
+            log Debug "Resolved package $token to UID $final_uid"
+        else
+            log Warn "Failed to resolve UID for package: $package"
+        fi
+    done
+    echo "$out" | awk '{$1=$1;print}'
 }
 
-probe_user_group() {
-  if bin_pid=$(busybox pidof ${bin_name}) ; then
-    box_user=$(stat -c %U /proc/${bin_pid})
-    box_group=$(stat -c %G /proc/${bin_pid})
-    return 0
-  else
-    box_user=$(echo ${box_user_group} | awk -F ':' '{print $1}')
-    box_group=$(echo ${box_user_group} | awk -F ':' '{print $2}')
+safe_chain_exists() {
+    local family="$1"
+    local table="$2"
+    local chain="$3"
+    local cmd="iptables"
+
+    if [ "$family" = "6" ]; then
+        cmd="ip6tables"
+    fi
+
+    if $cmd -t "$table" -L "$chain" > /dev/null 2>&1; then
+        return 0
+    fi
+
     return 1
-  fi
 }
 
-start_redirect() {
-  ${iptables} -t nat -N BOX_EXTERNAL
-  ${iptables} -t nat -F BOX_EXTERNAL
-  ${iptables} -t nat -N BOX_LOCAL
-  ${iptables} -t nat -F BOX_LOCAL
+safe_chain_create() {
+    local family="$1"
+    local table="$2"
+    local chain="$3"
+    local cmd="iptables"
 
-  if [ "${bin_name}" = "clash" ] ; then
-    ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
-    ${iptables} -t nat -A BOX_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
-    ${iptables} -t nat -A BOX_EXTERNAL -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
-    ${iptables} -t nat -A BOX_LOCAL -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
-#  else
-#    Other types of inbound should be added here to receive DNS traffic instead of sniffing
-#    ${iptables} -t nat -A BOX_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${redir_port}
-#    ${iptables} -t nat -A BOX_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${redir_port}
-  fi
-
-  for subnet in ${intranet[@]} ; do
-    ${iptables} -t nat -A BOX_EXTERNAL -d ${subnet} -j RETURN
-    ${iptables} -t nat -A BOX_LOCAL -d ${subnet} -j RETURN
-    ${iptables} -t nat -N LOCAL_IP_V4
-    ${iptables} -t nat -F LOCAL_IP_V4
-    ${iptables} -t nat -A BOX_EXTERNAL -j LOCAL_IP_V4
-    ${iptables} -t nat -A BOX_LOCAL -j LOCAL_IP_V4
-  done
-
-  ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i lo -j REDIRECT --to-ports ${redir_port}
-
-  if [ "${ap_list}" != "" ] ; then
-    for ap in ${ap_list[@]} ; do
-      ${iptables} -t nat -A BOX_EXTERNAL -p tcp -i ${ap} -j REDIRECT --to-ports ${redir_port}
-    done
-    log Info "${ap_list[*]} transparent proxy."
-  fi
-
-  ${iptables} -t nat -I PREROUTING -j BOX_EXTERNAL
-
-
-  ${iptables} -t nat -I BOX_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
-
-  if [ "${ignore_out_list}" != "" ] ; then
-    for ignore in ${ignore_out_list[@]} ; do
-      ${iptables} -t nat -A BOX_LOCAL -o ${ignore} -j RETURN
-    done
-    log Info "${ignore_out_list[*]} ignore transparent proxy."
-  fi
-
-  if [ "${proxy_mode}" = "blacklist" ] ; then
-    if [ "${uid_list}" = "" ] ; then
-      # Route Everything
-      ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
-      log Info "transparent proxy for all apps."
-    else
-      # Bypass apps
-      for appid in ${uid_list[@]} ; do
-        ${iptables} -t nat -A BOX_LOCAL -m owner --uid-owner ${appid} -j RETURN
-      done
-      # Allow !app
-      ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
-      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} no transparent proxy."
+    if [ "$family" = "6" ]; then
+        cmd="ip6tables"
     fi
-    if [ "${gid_list}" != "" ] ; then
-      # Bypass gids
-      for gid in ${gid_list[@]} ; do
-        ${iptables} -t nat -A BOX_LOCAL -m owner --gid-owner ${gid} -j RETURN
-      done
-      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} no transparent proxy."
-    fi
-  elif [ "${proxy_mode}" = "whitelist" ] ; then
-    if [ "${uid_list}" != "" ] ; then
-      # Route apps to Box
-      for appid in ${uid_list[@]} ; do
-        ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j REDIRECT --to-ports ${redir_port}
-      done
-      ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j REDIRECT --to-ports ${redir_port}
-      ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j REDIRECT --to-ports ${redir_port}
-      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
-    fi
-    if [ "${gid_list}" != "" ] ; then
-      # Route gids to Box
-      for gid in ${gid_list[@]} ; do
-        ${iptables} -t nat -A BOX_LOCAL -p tcp -m owner --gid-owner ${gid} -j REDIRECT --to-ports ${redir_port}
-      done
-      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} transparent proxy."
-    fi
-  else
-    log Warn "proxy mode: ${proxy_mode} error."
-    # Route Everything
-    ${iptables} -t nat -A BOX_LOCAL -p tcp -j REDIRECT --to-ports ${redir_port}
-    log Info "transparent proxy for all apps."
-  fi
 
-  ${iptables} -t nat -I OUTPUT -j BOX_LOCAL
+    if [ "$DRY_RUN" -eq 1 ] || ! safe_chain_exists "$family" "$table" "$chain"; then
+        $cmd -t "$table" -N "$chain"
+    fi
 
-  ${iptables} -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${redir_port} -j REJECT
+    $cmd -t "$table" -F "$chain"
 }
 
-stop_redirect() {
-  ${iptables} -t nat -D PREROUTING -j BOX_EXTERNAL
-
-  ${iptables} -t nat -D OUTPUT -j BOX_LOCAL
-
-  ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${redir_port} -j REJECT
-  ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${redir_port} -j REJECT
-
-
-  ${iptables} -t nat -F BOX_EXTERNAL
-  ${iptables} -t nat -X BOX_EXTERNAL
-  ${iptables} -t nat -F BOX_LOCAL
-  ${iptables} -t nat -X BOX_LOCAL
-  ${iptables} -t nat -F LOCAL_IP_V4
-  ${iptables} -t nat -X LOCAL_IP_V4
-}
-
-start_tproxy() {
-  if [ "${iptables}" = "ip6tables -w 100" ] ; then
-    ip -6 rule add fwmark ${mark_id} table ${table_id} pref ${table_id}
-    ip -6 route add local default dev lo table ${table_id}
-  else
-    ip rule add fwmark ${mark_id} table ${table_id} pref ${table_id}
-    ip route add local default dev lo table ${table_id}
-  fi
-
-  ${iptables} -t mangle -N BOX_EXTERNAL
-  ${iptables} -t mangle -F BOX_EXTERNAL
-
-  # Bypass box itself
-  # ${iptables} -t mangle -A BOX_EXTERNAL -m mark --mark ${routing_mark} -j RETURN
-
-  # Bypass other if
-  # Notice: Some interface is named with r_ / oem / nm_ / qcom_
-  # It might need more complicated solution.
-  # ${iptables} -t mangle -A BOX_EXTERNAL -i rmnet_data+ -j RETURN
-  # ${iptables} -t mangle -A BOX_EXTERNAL -i ccmni+ -j RETURN
-
-  if [ "${mihomo_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
-    ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j RETURN
-    ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j RETURN
-  else
-    # Route DNS request to Box
-    ${iptables} -t mangle -A BOX_EXTERNAL -p tcp --dport 53 -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
-    ${iptables} -t mangle -A BOX_EXTERNAL -p udp --dport 53 -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
-  fi
-
-  # Skip traffic already handled by TProxy
-  # If the interface of the default route has a public IPv4 or IPv6 address assigned by the ISP, omitting these rules will result in abnormal proxy behavior for local traffic
-  ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -m socket --transparent -j MARK --set-xmark ${mark_id}
-  ${iptables} -t mangle -A BOX_EXTERNAL -p udp -m socket --transparent -j MARK --set-xmark ${mark_id}
-  ${iptables} -t mangle -A BOX_EXTERNAL -m socket -j RETURN
-
-  # Bypass intranet
-  # Run `su -c 'zcat /proc/config.gz | grep -i addrtype'` to check compatibility
-  # ${iptables} -t mangle -A BOX_EXTERNAL -m addrtype --dst-type LOCAL -j RETURN
-  if [ "${iptables}" = "ip6tables -w 100" ] ; then
-    for subnet6 in ${intranet6[@]} ; do
-      ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet6} -j RETURN
-    done
-    ${iptables} -t mangle -N LOCAL_IP_V6
-    ${iptables} -t mangle -F LOCAL_IP_V6
-    ${iptables} -t mangle -A BOX_EXTERNAL -j LOCAL_IP_V6
-  else
-    for subnet in ${intranet[@]} ; do
-      ${iptables} -t mangle -A BOX_EXTERNAL -d ${subnet} -j RETURN
-    done
-    ${iptables} -t mangle -N LOCAL_IP_V4
-    ${iptables} -t mangle -F LOCAL_IP_V4
-    ${iptables} -t mangle -A BOX_EXTERNAL -j LOCAL_IP_V4
-  fi
-
-  ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -i lo -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
-  ${iptables} -t mangle -A BOX_EXTERNAL -p udp -i lo -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
-
-  # Allow ap interface
-  # Notice: Old android device may only have one wlan interface.
-  # Some new android device have multiple wlan interface like wlan0(for internet), wlan1(for AP).
-  if [ "${ap_list}" != "" ] ; then
-    for ap in ${ap_list[@]} ; do
-      ${iptables} -t mangle -A BOX_EXTERNAL -p tcp -i ${ap} -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
-      ${iptables} -t mangle -A BOX_EXTERNAL -p udp -i ${ap} -j TPROXY --on-port ${tproxy_port} --tproxy-mark ${mark_id}
-    done
-    log Info "${ap_list[*]} transparent proxy."
-  fi
-
-  ${iptables} -t mangle -I PREROUTING -j BOX_EXTERNAL
-
-
-  ${iptables} -t mangle -N BOX_LOCAL
-  ${iptables} -t mangle -F BOX_LOCAL
-
-  # Bypass box itself
-  ${iptables} -t mangle -A BOX_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
-  # ${iptables} -t mangle -A BOX_LOCAL -m mark --mark ${routing_mark} -j RETURN
-
-  # Bypass ignored interfaces
-  if [ "${ignore_out_list}" != "" ] ; then
-    for ignore in ${ignore_out_list[@]} ; do
-      ${iptables} -t mangle -A BOX_LOCAL -o ${ignore} -j RETURN
-    done
-    log Info "${ignore_out_list[*]} ignore transparent proxy."
-  fi
-
-  if [ "${mihomo_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "hysteria" ] || [ "${bin_name}" = "clash" ] ; then
-    ${iptables} -t mangle -A BOX_LOCAL -p tcp --dport 53 -j RETURN
-    ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j RETURN
-  else
-    # Route DNS request to Box
-    ${iptables} -t mangle -A BOX_LOCAL -p tcp --dport 53 -j MARK --set-xmark ${mark_id}
-    ${iptables} -t mangle -A BOX_LOCAL -p udp --dport 53 -j MARK --set-xmark ${mark_id}
-  fi
-  # Bypass intranet
-  # ${iptables} -t mangle -A BOX_LOCAL -m addrtype --dst-type LOCAL -j RETURN
-  if [ "${iptables}" = "ip6tables -w 100" ] ; then
-    for subnet6 in ${intranet6[@]} ; do
-      ${iptables} -t mangle -A BOX_LOCAL -d ${subnet6} -j RETURN
-    done
-    ${iptables} -t mangle -A BOX_LOCAL -j LOCAL_IP_V6
-  else
-    for subnet in ${intranet[@]} ; do
-      ${iptables} -t mangle -A BOX_LOCAL -d ${subnet} -j RETURN
-    done
-    ${iptables} -t mangle -A BOX_LOCAL -j LOCAL_IP_V4
-  fi
-
-  # Disable kernel
-  # ${iptables} -t mangle -A BOX_LOCAL -m owner ! --uid 0-99999999 -j DROP
-
-  if [ "${proxy_mode}" = "blacklist" ] ; then
-    if [ "${uid_list}" = "" ] ; then
-      # Route Everything
-      ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-xmark ${mark_id}
-      ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-xmark ${mark_id}
-      log Info "transparent proxy for all apps."
-    else
-      # Bypass apps
-      for appid in ${uid_list[@]} ; do
-        ${iptables} -t mangle -A BOX_LOCAL -m owner --uid-owner ${appid} -j RETURN
-      done
-      # Allow !app
-      ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-xmark ${mark_id}
-      ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-xmark ${mark_id}
-      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} no transparent proxy."
+download_cn_ip_list() {
+    if [ "$BYPASS_CN_IP" -eq 0 ]; then
+        log Debug "CN IP bypass is disabled, skipping download"
+        return 0
     fi
-    if [ "${gid_list}" != "" ] ; then
-      # Bypass gids
-      for gid in ${gid_list[@]} ; do
-        ${iptables} -t mangle -A BOX_LOCAL -m owner --gid-owner ${gid} -j RETURN
-      done
-      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} no transparent proxy."
-    fi
-  elif [ "${proxy_mode}" = "whitelist" ] ; then
-    if [ "${uid_list}" != "" ] ; then
-      # Route apps to Box
-      for appid in ${uid_list[@]} ; do
-        ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner ${appid} -j MARK --set-xmark ${mark_id}
-        ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner ${appid} -j MARK --set-xmark ${mark_id}
-      done
-      ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 0 -j MARK --set-xmark ${mark_id}
-      ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 0 -j MARK --set-xmark ${mark_id}
-      # Route dnsmasq to Box
-      ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --uid-owner 1052 -j MARK --set-xmark ${mark_id}
-      ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --uid-owner 1052 -j MARK --set-xmark ${mark_id}
-      log Info "proxy mode: ${proxy_mode}, ${user_packages_list[*]} transparent proxy."
-    fi
-    if [ "${gid_list}" != "" ] ; then
-      # Route gids to Box
-      for gid in ${gid_list[@]} ; do
-        ${iptables} -t mangle -A BOX_LOCAL -p tcp -m owner --gid-owner ${gid} -j MARK --set-xmark ${mark_id}
-        ${iptables} -t mangle -A BOX_LOCAL -p udp -m owner --gid-owner ${gid} -j MARK --set-xmark ${mark_id}
-      done
-      log Info "proxy mode: ${proxy_mode}, GID ${gid_list[*]} transparent proxy."
-    fi
-  else
-    log Warn "proxy mode: ${proxy_mode} error."
-    # Route Everything
-    ${iptables} -t mangle -A BOX_LOCAL -p tcp -j MARK --set-xmark ${mark_id}
-    ${iptables} -t mangle -A BOX_LOCAL -p udp -j MARK --set-xmark ${mark_id}
-    log Info "transparent proxy for all apps."
-  fi
 
-  ${iptables} -t mangle -I OUTPUT -j BOX_LOCAL
+    log Info "Checking/Downloading China mainland IP list to $CN_IP_FILE"
 
-
-  # ${iptables} -t mangle -N DIVERT
-  # ${iptables} -t mangle -F DIVERT
-
-  # ${iptables} -t mangle -A DIVERT -j MARK --set-xmark ${mark_id}
-  # ${iptables} -t mangle -A DIVERT -j ACCEPT
-
-  # ${iptables} -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
-
-
-  # This rule blocks local access to tproxy-port to prevent traffic loopback.
-  if [ "${iptables}" = "ip6tables -w 100" ] ; then
-    ${iptables} -A OUTPUT -d ::1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
-  else
-    ${iptables} -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
-  fi
-
-
-  if [ "${mihomo_dns_forward}" = "true" ] && [ "${bin_name}" = "mihomo" ] || [ "${bin_name}" = "clash" ] ; then
-    if [ "${iptables}" = "iptables -w 100" ] ; then
-      # android ip6tablses no nat table
-      ${iptables} -t nat -N CLASH_DNS_EXTERNAL
-      ${iptables} -t nat -F CLASH_DNS_EXTERNAL
-
-      ${iptables} -t nat -A CLASH_DNS_EXTERNAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
-
-      ${iptables} -t nat -I PREROUTING -j CLASH_DNS_EXTERNAL
-
-
-      ${iptables} -t nat -N CLASH_DNS_LOCAL
-      ${iptables} -t nat -F CLASH_DNS_LOCAL
-
-      ${iptables} -t nat -A CLASH_DNS_LOCAL -m owner --uid-owner ${box_user} --gid-owner ${box_group} -j RETURN
-
-      ${iptables} -t nat -A CLASH_DNS_LOCAL -p udp --dport 53 -j REDIRECT --to-ports ${clash_dns_port}
-
-      ${iptables} -t nat -I OUTPUT -j CLASH_DNS_LOCAL
-    fi
-  fi
-
-  # Fix ICMP (ping), this does not guarantee that the ping result is valid (proxies such as clash do not support forwarding ICMP),
-  # just that it returns a result, "--to-destination" can be set to a reachable address
-  iptables -w 100 -t nat -A OUTPUT -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
-  iptables -w 100 -t nat -A PREROUTING -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
-  # ip6tables -w 100 -t nat -A OUTPUT -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
-  # ip6tables -w 100 -t nat -A PREROUTING -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
-}
-
-stop_tproxy() {
-  ip -6 rule del fwmark ${mark_id} table ${table_id} pref ${table_id}
-  ip -6 route flush table ${table_id}
-  ip rule del fwmark ${mark_id} table ${table_id} pref ${table_id}
-  ip route flush table ${table_id}
-
-  ${iptables} -t mangle -D PREROUTING -j BOX_EXTERNAL
-    
-  # ${iptables} -t mangle -D PREROUTING -p tcp -m socket -j DIVERT
-
-  ${iptables} -t mangle -D OUTPUT -j BOX_LOCAL
-
-  ${iptables} -t mangle -F BOX_EXTERNAL
-  ${iptables} -t mangle -X BOX_EXTERNAL
-
-  ${iptables} -t mangle -F BOX_LOCAL
-  ${iptables} -t mangle -X BOX_LOCAL
-
-  iptables -t mangle -F LOCAL_IP_V4
-  iptables -t mangle -X LOCAL_IP_V4
-  ip6tables -t mangle -F LOCAL_IP_V6
-  ip6tables -t mangle -X LOCAL_IP_V6
-
-  # ${iptables} -t mangle -F DIVERT
-  # ${iptables} -t mangle -X DIVERT
-
-  if [ "${iptables}" = "ip6tables -w 100" ] ; then
-    ${iptables} -D OUTPUT -d ::1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
-    ${iptables} -D OUTPUT -d ::1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
-  else
-    ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner ${box_user} --gid-owner ${box_group} -m tcp --dport ${tproxy_port} -j REJECT
-    ${iptables} -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner 0 --gid-owner 3005 -m tcp --dport ${tproxy_port} -j REJECT
-  fi
-
-
-  # android ip6tablses no nat table
-  iptables="iptables -w 100"
-  ${iptables} -t nat -D PREROUTING -j CLASH_DNS_EXTERNAL
-
-  ${iptables} -t nat -D OUTPUT -j CLASH_DNS_LOCAL
-
-  ${iptables} -t nat -F CLASH_DNS_EXTERNAL
-  ${iptables} -t nat -X CLASH_DNS_EXTERNAL
-
-  ${iptables} -t nat -F CLASH_DNS_LOCAL
-  ${iptables} -t nat -X CLASH_DNS_LOCAL
-
-  iptables -t nat -D OUTPUT -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
-  iptables -t nat -D PREROUTING -d ${fake_ip_range_v4} -p icmp -j DNAT --to-destination 127.0.0.1
-  # ip6tables -t nat -D OUTPUT -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
-  # ip6tables -t nat -D PREROUTING -d ${fake_ip_range_v6} -p icmp -j DNAT --to-destination ::1
-}
-
-disable_ipv6() {
-  echo 0 > /proc/sys/net/ipv6/conf/all/accept_ra
-  echo 0 > /proc/sys/net/ipv6/conf/wlan0/accept_ra
-  echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
-  echo 1 > /proc/sys/net/ipv6/conf/default/disable_ipv6
-  echo 1 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6
-}
-
-enable_ipv6() {
-  echo 1 > /proc/sys/net/ipv6/conf/all/accept_ra
-  echo 1 > /proc/sys/net/ipv6/conf/wlan0/accept_ra
-  echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6
-  echo 0 > /proc/sys/net/ipv6/conf/default/disable_ipv6
-  echo 0 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6
-}
-
-if [ "${proxy_mode}" = "core" ] ; then
-  iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-  iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-  iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-  log Info "proxy_mode: ${proxy_mode}, disable transparent proxy."
-  return 0
-fi
-
-case "$1" in
-  enable)
-    iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-    iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-    iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-    sleep 1
-    if ! probe_user_group ; then
-      log Error "failed to check Box user group, please make sure ${bin_name} core is started."
-      return 1
-    fi
-    find_packages_uid
-    intranet[${#intranet[@]}]=$(ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1")
-    if [ "${proxy_method}" = "TPROXY" ] ; then
-      if (zcat /proc/config.gz | grep -q TPROXY) ; then
-        log Info "use TPROXY:TCP+UDP."
-        log Info "creating ip(6)tables transparent proxy rules."
-        iptables="iptables -w 100"
-        start_tproxy && log Info "create iptables transparent proxy rules done." || (log Error "create iptables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
-        if [ "${ipv6}" = "enable" ] ; then
-          log Debug "use IPv6."
-          enable_ipv6
-          iptables="ip6tables -w 100"
-          intranet6[${#intranet6[@]}]=$(ip -6 a | awk '/inet6/ {print $2}' | grep -vE "^fe80|^::1")
-          start_tproxy && log Info "create ip6tables transparent proxy rules done." || (log Error "create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
+    # Re-download if file doesn't exist or is older than 7 days
+    if [ ! -f "$CN_IP_FILE" ]; then
+        log Info "Fetching latest China IP list from $CN_IP_URL"
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log Debug "[DRY-RUN] curl -fsSL --connect-timeout 10 --retry 3 $CN_IP_URL -o $CN_IP_FILE.tmp"
         else
-          disable_ipv6
-          log Warn "disable IPv6."
+            if ! curl -fsSL --connect-timeout 10 --retry 3 \
+                "$CN_IP_URL" \
+                -o "$CN_IP_FILE.tmp"; then
+                log Error "Failed to download China IP list"
+                rm -f "$CN_IP_FILE.tmp"
+                return 1
+            fi
         fi
-      else
-        log Warn "the device does not support TPROXY, please switch proxy_method."
-        log Info "use REDIRECT:TCP."
-        log Info "creating iptables transparent proxy rules."
-        iptables="iptables -w 100"
-        start_redirect && log Info "create iptables transparent proxy rules done." || (log Error "create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
-        [ "${ipv6}" = "enable" ] && enable_ipv6 && log Warn "enable IPv6." || (disable_ipv6 && log Warn "disable IPv6.")
-      fi
+        if [ "$DRY_RUN" -eq 0 ]; then
+            mv "$CN_IP_FILE.tmp" "$CN_IP_FILE"
+        fi
+        log Info "China IP list saved to $CN_IP_FILE"
     else
-      [ "${proxy_method}" = "REDIRECT" ] && log Info "use REDIRECT:TCP." || log Info "use MIXED:TCP+TUN."
-      log Info "creating iptables transparent proxy rules."
-      iptables="iptables -w 100"
-      start_redirect && log Info "create iptables transparent proxy rules done." || (log Error "create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
-      [ "${ipv6}" = "enable" ] && enable_ipv6 && log Warn "enable IPv6." || (disable_ipv6 && log Warn "disable IPv6.")
+        log Debug "Using existing China IP list: $CN_IP_FILE"
     fi
-    ;;
-  disable)
-    log Warn "cleaning up ip(6)tables transparent proxy rules."
-    probe_user_group
-    iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-    iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-    iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-    log Warn "clean up ip(6)tables transparent proxy rules done."
-    enable_ipv6
-    log Warn "enable IPv6."
+
+    if [ "$PROXY_IPV6" -eq 1 ]; then
+        log Info "Checking/Downloading China mainland IPv6 list to $CN_IPV6_FILE"
+
+        if [ ! -f "$CN_IPV6_FILE" ]; then
+            log Info "Fetching latest China IPv6 list from $CN_IPV6_URL"
+            if [ "$DRY_RUN" -eq 1 ]; then
+                log Debug "[DRY-RUN] curl -fsSL --connect-timeout 10 --retry 3 $CN_IPV6_URL -o $CN_IPV6_FILE.tmp"
+            else
+                if ! curl -fsSL --connect-timeout 10 --retry 3 \
+                    "$CN_IPV6_URL" \
+                    -o "$CN_IPV6_FILE.tmp"; then
+                    log Error "Failed to download China IPv6 list"
+                    rm -f "$CN_IPV6_FILE.tmp"
+                    return 1
+                fi
+            fi
+            if [ "$DRY_RUN" -eq 0 ]; then
+                mv "$CN_IPV6_FILE.tmp" "$CN_IPV6_FILE"
+            fi
+            log Info "China IPv6 list saved to $CN_IPV6_FILE"
+        else
+            log Debug "Using existing China IPv6 list: $CN_IPV6_FILE"
+        fi
+    fi
+}
+
+setup_cn_ipset() {
+    if [ "$BYPASS_CN_IP" -eq 0 ]; then
+        log Debug "CN IP bypass is disabled, skipping ipset setup"
+        return 0
+    fi
+
+    if ! command -v ipset > /dev/null 2>&1; then
+        log Error "ipset not found. Cannot bypass CN IPs"
+        return 1
+    fi
+
+    log Info "Setting up ipset for China mainland IPs"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ipset destroy cnip"
+        log Debug "[DRY-RUN] ipset destroy cnip6"
+    else
+        ipset destroy cnip 2> /dev/null || true
+        ipset destroy cnip6 2> /dev/null || true
+    fi
+
+    if [ -f "$CN_IP_FILE" ]; then
+        log Debug "Loading IPv4 CIDR from $CN_IP_FILE"
+        ipv4_count=$(wc -l < "$CN_IP_FILE" 2> /dev/null || echo "0")
+
+        if [ "$DRY_RUN" -eq 1 ]; then
+            log Debug "[DRY-RUN] Would load $ipv4_count IPv4 CIDR entries via ipset restore"
+            log Debug "[DRY-RUN] ipset create cnip hash:net family inet hashsize 8192 maxelem 65536"
+        else
+            temp_file=$(mktemp)
+            {
+                echo "create cnip hash:net family inet hashsize 8192 maxelem 65536"
+                awk '!/^[[:space:]]*#/ && NF > 0 {printf "add cnip %s\n", $0}' "$CN_IP_FILE"
+            } > "$temp_file"
+
+            if ipset restore -f "$temp_file" 2> /dev/null; then
+                log Info "Successfully loaded $ipv4_count IPv4 CIDR entries"
+            else
+                log Error "Failed to create ipset 'cnip' or load IPv4 CIDR entries"
+                rm -f "$temp_file"
+                return 1
+            fi
+            rm -f "$temp_file"
+        fi
+    else
+        log Warn "CN IP file not found: $CN_IP_FILE"
+        return 1
+    fi
+
+    log Info "ipset 'cnip' loaded with China mainland IPs"
+
+    if [ "$PROXY_IPV6" -eq 1 ]; then
+        if [ -f "$CN_IPV6_FILE" ]; then
+            log Debug "Loading IPv6 CIDR from $CN_IPV6_FILE"
+            ipv6_count=$(wc -l < "$CN_IPV6_FILE" 2> /dev/null || echo "0")
+
+            if [ "$DRY_RUN" -eq 1 ]; then
+                log Debug "[DRY-RUN] Would load $ipv6_count IPv6 CIDR entries via ipset restore"
+                log Debug "[DRY-RUN] ipset create cnip6 hash:net family inet6 hashsize 8192 maxelem 65536"
+            else
+                temp_file6=$(mktemp)
+                {
+                    echo "create cnip6 hash:net family inet6 hashsize 8192 maxelem 65536"
+                    awk '!/^[[:space:]]*#/ && NF > 0 {printf "add cnip6 %s\n", $0}' "$CN_IPV6_FILE"
+                } > "$temp_file6"
+
+                if ipset restore -f "$temp_file6" 2> /dev/null; then
+                    log Info "Successfully loaded $ipv6_count IPv6 CIDR entries"
+                else
+                    log Error "Failed to create ipset 'cnip6' or load IPv6 CIDR entries"
+                    rm -f "$temp_file6"
+                    return 1
+                fi
+                rm -f "$temp_file6"
+            fi
+            log Info "ipset 'cnip6' loaded with China mainland IPv6 IPs"
+        else
+            log Warn "CN IPv6 file not found: $CN_IPV6_FILE"
+        fi
+    fi
+
     return 0
-    ;;
-  renew)
-    log Warn "cleaning up ip(6)tables transparent proxy rules."
-    iptables="iptables -w 100" && stop_tproxy >> /dev/null 2>&1
-    iptables="ip6tables -w 100" && stop_tproxy >> /dev/null 2>&1
-    iptables="iptables -w 100" && stop_redirect >> /dev/null 2>&1
-    log Warn "clean up ip(6)tables transparent proxy rules done."
-    sleep 3
-    if ! probe_user_group ; then
-      log Error "failed to check Box user group, please make sure ${bin_name} core is started."
-      return 1
+}
+
+# Unified setup function for both IPv4 and IPv6 with mode selection
+setup_proxy_chain() {
+    local family="$1"
+    local mode="$2" # tproxy or redirect
+    local suffix=""
+    local mark="$MARK_VALUE"
+    local cmd="iptables"
+
+    if [ "$family" = "6" ]; then
+        suffix="6"
+        mark="$MARK_VALUE6"
+        cmd="ip6tables"
     fi
-    find_packages_uid
-    intranet[${#intranet[@]}]=$(ip -4 a | awk '/inet/ {print $2}' | grep -vE "^127.0.0.1")
-    if [ "${proxy_method}" = "TPROXY" ] ; then
-      if (zcat /proc/config.gz | grep -q TPROXY) ; then
-        log Info "use TPROXY:TCP+UDP."
-        log Info "creating ip(6)tables transparent proxy rules."
-        iptables="iptables -w 100"
-        start_tproxy && log Info "create iptables transparent proxy rules done." || (log Error "create iptables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
-        if [ "${ipv6}" = "enable" ] ; then
-          log Debug "use IPv6."
-          enable_ipv6
-          iptables="ip6tables -w 100"
-          intranet6[${#intranet6[@]}]=$(ip -6 a | awk '/inet6/ {print $2}' | grep -vE "^fe80|^::1")
-          start_tproxy && log Info "create ip6tables transparent proxy rules done." || (log Error "create ip6tables transparent proxy rules failed." && stop_tproxy >> /dev/null 2>&1)
-        else
-          disable_ipv6
-          log Warn "disable IPv6."
-        fi
-      else
-        log Warn "the device does not support TPROXY, please switch proxy_method."
-        log Info "use REDIRECT:TCP."
-        log Info "creating iptables transparent proxy rules."
-        iptables="iptables -w 100"
-        start_redirect && log Info "create iptables transparent proxy rules done." || (log Error "create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
-        [ "${ipv6}" = "enable" ] && enable_ipv6 && log Warn "enable IPv6." || (disable_ipv6 && log Warn "disable IPv6.")
-      fi
+
+    # Set mode name for logging
+    local mode_name="$mode"
+    if [ "$mode" = "tproxy" ]; then
+        mode_name="TPROXY"
     else
-      [ "${proxy_method}" = "REDIRECT" ] && log Info "use REDIRECT:TCP." || log Info "use MIXED:TCP+TUN."
-      log Info "creating iptables transparent proxy rules."
-      iptables="iptables -w 100"
-      start_redirect && log Info "create iptables transparent proxy rules done." || (log Error "create iptables transparent proxy rules failed." && stop_redirect >> /dev/null 2>&1)
-      [ "${ipv6}" = "enable" ] && enable_ipv6 && log Warn "enable IPv6." || (disable_ipv6 && log Warn "disable IPv6.")
+        mode_name="REDIRECT"
     fi
-    ;;
-  enable_ipv6)
-    enable_ipv6
-    log Warn "enable IPv6."
-    ;;
-  disable_ipv6)
-    disable_ipv6
-    log Warn "disable IPv6."
-    ;;
-  *)
-    log Error "$0 $1 usage: $0 {enable|disable|renew|enable_ipv6|disable_ipv6}"
-    ;;
-esac
+
+    log Info "Setting up $mode_name chains for IPv${family}"
+
+    # Define chains based on family
+    local chains=""
+    if [ "$family" = "6" ]; then
+        chains="PROXY_PREROUTING6 PROXY_OUTPUT6 BYPASS_IP6 BYPASS_INTERFACE6 PROXY_INTERFACE6 DNS_HIJACK_PRE6 DNS_HIJACK_OUT6 APP_CHAIN6 GID_CHAIN6 MAC_CHAIN6"
+    else
+        chains="PROXY_PREROUTING PROXY_OUTPUT BYPASS_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN GID_CHAIN MAC_CHAIN"
+    fi
+
+    local table="mangle"
+    if [ "$mode" = "redirect" ]; then
+        table="nat"
+    fi
+
+    # Create chains
+    for c in $chains; do
+        safe_chain_create "$family" "$table" "$c"
+    done
+
+    $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -j "BYPASS_IP$suffix"
+    $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -j "PROXY_INTERFACE$suffix"
+    $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -j "MAC_CHAIN$suffix"
+    $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -j "DNS_HIJACK_PRE$suffix"
+
+    $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "BYPASS_IP$suffix"
+    $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "BYPASS_INTERFACE$suffix"
+    $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "APP_CHAIN$suffix"
+    $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "GID_CHAIN$suffix"
+    $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j "DNS_HIJACK_OUT$suffix"
+
+    if check_kernel_feature "NETFILTER_XT_MATCH_ADDRTYPE"; then
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -m addrtype --dst-type LOCAL -p udp ! --dport 53 -j ACCEPT
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -m addrtype --dst-type LOCAL ! -p udp -j ACCEPT
+        log Info "Added local address type bypass"
+    fi
+
+    if check_kernel_feature "NETFILTER_XT_MATCH_CONNTRACK"; then
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -m conntrack --ctdir REPLY -j ACCEPT
+        log Info "Added reply connection direction bypass"
+    fi
+
+    # Add private IP ranges based on family
+    if [ "$family" = "6" ]; then
+        for subnet6 in ::/128 ::1/128 ::ffff:0:0/96 \
+            100::/64 64:ff9b::/96 2001::/32 2001:10::/28 \
+            2001:20::/28 2001:db8::/32 \
+            2002::/16 fe80::/10 ff00::/8; do
+            $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet6" -p udp ! --dport 53 -j ACCEPT
+            $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet6" ! -p udp -j ACCEPT
+        done
+    else
+        for subnet4 in 0.0.0.0/8 10.0.0.0/8 100.0.0.0/8 127.0.0.0/8 \
+            169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.88.99.0/24 \
+            192.168.0.0/16 198.51.100.0/24 203.0.113.0/24 \
+            224.0.0.0/4 240.0.0.0/4 255.255.255.255/32; do
+            $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet4" -p udp ! --dport 53 -j ACCEPT
+            $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet4" ! -p udp -j ACCEPT
+        done
+    fi
+    log Info "Added bypass rules for private IP ranges"
+
+    if [ "$BYPASS_CN_IP" -eq 1 ]; then
+        ipset_name="cnip"
+        if [ "$family" = "6" ]; then
+            ipset_name="cnip6"
+        fi
+        if command -v ipset > /dev/null 2>&1 && ipset list "$ipset_name" > /dev/null 2>&1; then
+            $cmd -t "$table" -A "BYPASS_IP$suffix" -m set --match-set "$ipset_name" dst -p udp ! --dport 53 -j ACCEPT
+            $cmd -t "$table" -A "BYPASS_IP$suffix" -m set --match-set "$ipset_name" dst ! -p udp -j ACCEPT
+            log Info "Added ipset-based CN IP bypass rule"
+        else
+            log Warn "ipset '$ipset_name' not available, skipping CN IP bypass"
+        fi
+    fi
+
+    log Info "Configuring interface proxy rules"
+    $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i lo -j RETURN
+    if [ "$PROXY_MOBILE" -eq 1 ]; then
+        $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$MOBILE_INTERFACE" -j RETURN
+        log Info "Mobile interface $MOBILE_INTERFACE will be proxied"
+    else
+        $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$MOBILE_INTERFACE" -j ACCEPT
+        $cmd -t "$table" -A "BYPASS_INTERFACE$suffix" -o "$MOBILE_INTERFACE" -j ACCEPT
+        log Info "Mobile interface $MOBILE_INTERFACE will bypass proxy"
+    fi
+    if [ "$PROXY_WIFI" -eq 1 ]; then
+        $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$WIFI_INTERFACE" -j RETURN
+        log Info "WiFi interface $WIFI_INTERFACE will be proxied"
+    else
+        $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$WIFI_INTERFACE" -j ACCEPT
+        $cmd -t "$table" -A "BYPASS_INTERFACE$suffix" -o "$WIFI_INTERFACE" -j ACCEPT
+        log Info "WiFi interface $WIFI_INTERFACE will bypass proxy"
+    fi
+    if [ "$PROXY_HOTSPOT" -eq 1 ]; then
+        if [ "$HOTSPOT_INTERFACE" = "$WIFI_INTERFACE" ]; then
+            local subnet=""
+            if [ "$family" = "6" ]; then
+                subnet="fe80::/10"
+            else
+                subnet="192.168.43.0/24"
+            fi
+            $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$WIFI_INTERFACE" ! -s "$subnet" -j RETURN
+            log Info "Hotspot interface $WIFI_INTERFACE will be proxied"
+        else
+            $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$HOTSPOT_INTERFACE" -j RETURN
+            log Info "Hotspot interface $HOTSPOT_INTERFACE will be proxied"
+        fi
+    else
+        $cmd -t "$table" -A "BYPASS_INTERFACE$suffix" -o "$HOTSPOT_INTERFACE" -j ACCEPT
+        log Info "Hotspot interface $HOTSPOT_INTERFACE will bypass proxy"
+    fi
+    if [ "$PROXY_USB" -eq 1 ]; then
+        $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$USB_INTERFACE" -j RETURN
+        log Info "USB interface $USB_INTERFACE will be proxied"
+    else
+        $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -i "$USB_INTERFACE" -j ACCEPT
+        $cmd -t "$table" -A "BYPASS_INTERFACE$suffix" -o "$USB_INTERFACE" -j ACCEPT
+        log Info "USB interface $USB_INTERFACE will bypass proxy"
+    fi
+    $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -j ACCEPT
+    log Info "Interface proxy rules configuration completed"
+
+    if [ "$MAC_FILTER_ENABLE" -eq 1 ] && [ "$PROXY_HOTSPOT" -eq 1 ] && [ -n "$HOTSPOT_INTERFACE" ]; then
+        if check_kernel_feature "NETFILTER_XT_MATCH_MAC"; then
+            log Info "Setting up MAC address filter rules for interface $HOTSPOT_INTERFACE"
+            case "$MAC_PROXY_MODE" in
+                blacklist)
+                    if [ -n "$BYPASS_MACS_LIST" ]; then
+                        for mac in $BYPASS_MACS_LIST; do
+                            if [ -n "$mac" ]; then
+                                $cmd -t "$table" -A "MAC_CHAIN$suffix" -m mac --mac-source "$mac" -i "$HOTSPOT_INTERFACE" -j ACCEPT
+                                log Info "Added MAC bypass rule for $mac"
+                            fi
+                        done
+                    else
+                        log Warn "MAC blacklist mode enabled but no bypass MACs configured"
+                    fi
+                    $cmd -t "$table" -A "MAC_CHAIN$suffix" -i "$HOTSPOT_INTERFACE" -j RETURN
+                    ;;
+                whitelist)
+                    if [ -n "$PROXY_MACS_LIST" ]; then
+                        for mac in $PROXY_MACS_LIST; do
+                            if [ -n "$mac" ]; then
+                                $cmd -t "$table" -A "MAC_CHAIN$suffix" -m mac --mac-source "$mac" -i "$HOTSPOT_INTERFACE" -j RETURN
+                                log Info "Added MAC proxy rule for $mac"
+                            fi
+                        done
+                    else
+                        log Warn "MAC whitelist mode enabled but no proxy MACs configured"
+                    fi
+                    $cmd -t "$table" -A "MAC_CHAIN$suffix" -i "$HOTSPOT_INTERFACE" -j ACCEPT
+                    ;;
+            esac
+        else
+            log Warn "MAC filtering requires NETFILTER_XT_MATCH_MAC kernel feature which is not available"
+        fi
+    fi
+
+    if check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
+        $cmd -t "$table" -A "APP_CHAIN$suffix" -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT
+        log Info "Added bypass for core user $CORE_USER:$CORE_GROUP"
+    elif check_kernel_feature "NETFILTER_XT_MATCH_MARK" && [ -n "$ROUTING_MARK" ]; then
+        $cmd -t "$table" -A "APP_CHAIN$suffix" -m mark --mark "$ROUTING_MARK" -j ACCEPT
+        log Info "Added bypass for marked traffic with core mark $ROUTING_MARK"
+    else
+        log Warn "Core traffic bypass not configured, may cause traffic loop"
+    fi
+
+    if [ "$APP_PROXY_ENABLE" -eq 1 ]; then
+        if check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
+            log Info "Setting up application filter rules in $APP_PROXY_MODE mode"
+            case "$APP_PROXY_MODE" in
+                blacklist)
+                    if [ -n "$BYPASS_APPS_LIST" ]; then
+                        uids=$(find_packages_uid "$BYPASS_APPS_LIST" || true)
+                        for uid in $uids; do
+                            if [ -n "$uid" ]; then
+                                $cmd -t "$table" -A "APP_CHAIN$suffix" -m owner --uid-owner "$uid" -j ACCEPT
+                                log Info "Added bypass for UID $uid"
+                            fi
+                        done
+                    else
+                        log Warn "App blacklist mode enabled but no bypass apps configured"
+                    fi
+                    $cmd -t "$table" -A "APP_CHAIN$suffix" -j RETURN
+                    ;;
+                whitelist)
+                    if [ -n "$PROXY_APPS_LIST" ]; then
+                        uids=$(find_packages_uid "$PROXY_APPS_LIST" || true)
+                        for uid in $uids; do
+                            if [ -n "$uid" ]; then
+                                $cmd -t "$table" -A "APP_CHAIN$suffix" -m owner --uid-owner "$uid" -j RETURN
+                                log Info "Added proxy for UID $uid"
+                            fi
+                        done
+                    else
+                        log Warn "App whitelist mode enabled but no proxy apps configured"
+                    fi
+                    $cmd -t "$table" -A "APP_CHAIN$suffix" -j ACCEPT
+                    ;;
+            esac
+        else
+            log Warn "Application filtering requires NETFILTER_XT_MATCH_OWNER kernel feature which is not available"
+        fi
+    fi
+
+    if [ "$GID_PROXY_ENABLE" -eq 1 ]; then
+        if check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
+            log Info "Setting up GID filter rules in $GID_PROXY_MODE mode"
+            case "$GID_PROXY_MODE" in
+                blacklist)
+                    if [ -n "$BYPASS_GIDS_LIST" ]; then
+                        for gid in $BYPASS_GIDS_LIST; do
+                            if [ -n "$gid" ]; then
+                                $cmd -t "$table" -A "GID_CHAIN$suffix" -m owner --gid-owner "$gid" -j ACCEPT
+                                log Info "Added bypass for GID $gid"
+                            fi
+                        done
+                    else
+                        log Warn "GID blacklist mode enabled but no bypass gids configured"
+                    fi
+                    $cmd -t "$table" -A "GID_CHAIN$suffix" -j RETURN
+                    ;;
+                whitelist)
+                    if [ -n "$PROXY_GIDS_LIST" ]; then
+                        for gid in $PROXY_GIDS_LIST; do
+                            if [ -n "$gid" ]; then
+                                $cmd -t "$table" -A "GID_CHAIN$suffix" -m owner --gid-owner "$gid" -j RETURN
+                                log Info "Added proxy for GID $gid"
+                            fi
+                        done
+                    else
+                        log Warn "GID whitelist mode enabled but no proxy gids configured"
+                    fi
+                    $cmd -t "$table" -A "GID_CHAIN$suffix" -j ACCEPT
+                    ;;
+            esac
+        else
+            log Warn "GID filtering requires NETFILTER_XT_MATCH_OWNER kernel feature which is not available"
+        fi
+    fi
+
+    if [ "$DNS_HIJACK_ENABLE" -ne 0 ]; then
+        if [ "$mode" = "redirect" ]; then
+            setup_dns_hijack "$family" "redirect"
+        else
+            if [ "$DNS_HIJACK_ENABLE" -eq 2 ]; then
+                setup_dns_hijack "$family" "redirect2"
+            else
+                setup_dns_hijack "$family" "tproxy"
+            fi
+        fi
+    fi
+
+    if [ "$mode" = "tproxy" ]; then
+        $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -p tcp -j TPROXY --on-port "$PROXY_TCP_PORT" --tproxy-mark "$mark"
+        $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -p udp -j TPROXY --on-port "$PROXY_UDP_PORT" --tproxy-mark "$mark"
+        $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j MARK --set-mark "$mark"
+        log Info "TPROXY mode rules added"
+    else
+        $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
+        $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
+        log Info "REDIRECT mode rules added"
+    fi
+
+    # Add rules to main chains
+    if [ "$PROXY_UDP" -eq 1 ] || [ "$mode" = "redirect" ]; then
+        $cmd -t "$table" -I PREROUTING -p udp -j "PROXY_PREROUTING$suffix"
+        $cmd -t "$table" -I OUTPUT -p udp -j "PROXY_OUTPUT$suffix"
+        log Info "Added UDP rules to PREROUTING and OUTPUT chains"
+    fi
+    if [ "$PROXY_TCP" -eq 1 ]; then
+        $cmd -t "$table" -I PREROUTING -p tcp -j "PROXY_PREROUTING$suffix"
+        $cmd -t "$table" -I OUTPUT -p tcp -j "PROXY_OUTPUT$suffix"
+        log Info "Added TCP rules to PREROUTING and OUTPUT chains"
+    fi
+
+    log Info "$mode_name chains for IPv${family} setup completed"
+}
+
+setup_dns_hijack() {
+    local family="$1"
+    local mode="$2"
+    local suffix=""
+    local mark="$MARK_VALUE"
+    local cmd="iptables"
+
+    if [ "$family" = "6" ]; then
+        suffix="6"
+        mark="$MARK_VALUE6"
+        cmd="ip6tables"
+    fi
+
+    case "$mode" in
+        tproxy)
+            # Handle DNS from interfaces in PREROUTING chain (DNS_HIJACK_PRE)
+            $cmd -t mangle -A "DNS_HIJACK_PRE$suffix" -j RETURN
+            # Handle local DNS hijacking in OUTPUT chain (DNS_HIJACK_OUT)
+            $cmd -t mangle -A "DNS_HIJACK_OUT$suffix" -j RETURN
+
+            log Info "DNS hijack enabled using TPROXY mode"
+            ;;
+        redirect)
+            # Handle DNS using REDIRECT method
+            $cmd -t nat -A "DNS_HIJACK_PRE$suffix" -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+            $cmd -t nat -A "DNS_HIJACK_PRE$suffix" -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+            $cmd -t nat -A "DNS_HIJACK_OUT$suffix" -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+            $cmd -t nat -A "DNS_HIJACK_OUT$suffix" -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+
+            log Info "DNS hijack enabled using REDIRECT mode to port $DNS_PORT"
+            ;;
+        redirect2)
+            # Handle DNS using REDIRECT method
+            if [ "$family" = "6" ] && {
+                ! check_kernel_feature "IP6_NF_NAT" || ! check_kernel_feature "IP6_NF_TARGET_REDIRECT"
+            }; then
+                log Warn "IPv6: Kernel does not support IPv6 NAT or REDIRECT, skipping IPv6 DNS hijack"
+                return 0
+            fi
+            safe_chain_create "$family" "nat" "NAT_DNS_HIJACK$suffix"
+            $cmd -t nat -A "NAT_DNS_HIJACK$suffix" -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+            $cmd -t nat -A "NAT_DNS_HIJACK$suffix" -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+
+            [ "$PROXY_MOBILE" -eq 1 ] && $cmd -t nat -A PREROUTING -i "$MOBILE_INTERFACE" -j "NAT_DNS_HIJACK$suffix"
+            [ "$PROXY_WIFI" -eq 1 ] && $cmd -t nat -A PREROUTING -i "$WIFI_INTERFACE" -j "NAT_DNS_HIJACK$suffix"
+            [ "$PROXY_USB" -eq 1 ] && $cmd -t nat -A PREROUTING -i "$USB_INTERFACE" -j "NAT_DNS_HIJACK$suffix"
+
+            $cmd -t nat -A OUTPUT -p udp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT
+            $cmd -t nat -A OUTPUT -p tcp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT
+            $cmd -t nat -A OUTPUT -j "NAT_DNS_HIJACK$suffix"
+
+            log Info "DNS hijack enabled using REDIRECT mode to port $DNS_PORT"
+            ;;
+    esac
+}
+
+setup_tproxy_chain4() {
+    setup_proxy_chain 4 "tproxy"
+}
+
+setup_redirect_chain4() {
+    log Warn "REDIRECT mode only supports TCP"
+    setup_proxy_chain 4 "redirect"
+}
+
+setup_tproxy_chain6() {
+    setup_proxy_chain 6 "tproxy"
+}
+
+setup_redirect_chain6() {
+    if ! check_kernel_feature "IP6_NF_NAT" || ! check_kernel_feature "IP6_NF_TARGET_REDIRECT"; then
+        log Warn "IPv6: Kernel does not support IPv6 NAT or REDIRECT, skipping IPv6 proxy setup"
+        return 0
+    fi
+    log Warn "REDIRECT mode only supports TCP"
+    setup_proxy_chain 6 "redirect"
+}
+
+setup_routing4() {
+    log Info "Setting up routing rules for IPv4"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip rule add fwmark $MARK_VALUE lookup $TABLE_ID"
+        log Debug "[DRY-RUN] ip route add local 0.0.0.0/0 dev lo table $TABLE_ID"
+        log Debug "[DRY-RUN] echo 1 > /proc/sys/net/ipv4/ip_forward"
+    else
+        ip_rule del fwmark "$MARK_VALUE" lookup "$TABLE_ID" 2> /dev/null || true
+        ip_route del local 0.0.0.0/0 dev lo table "$TABLE_ID" 2> /dev/null || true
+
+        if ! ip_rule add fwmark "$MARK_VALUE" table "$TABLE_ID" pref "$TABLE_ID"; then
+            log Error "Failed to add IPv4 routing rule"
+            return 1
+        fi
+
+        if ! ip_route add local 0.0.0.0/0 dev lo table "$TABLE_ID"; then
+            log Error "Failed to add IPv4 route"
+            ip_rule del fwmark "$MARK_VALUE" table "$TABLE_ID" pref "$TABLE_ID" 2> /dev/null || true
+            return 1
+        fi
+
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+    fi
+
+    log Info "IPv4 routing setup completed"
+}
+
+setup_routing6() {
+    log Info "Setting up routing rules for IPv6"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip -6 rule add fwmark $MARK_VALUE6 lookup $TABLE_ID"
+        log Debug "[DRY-RUN] ip -6 route add local ::/0 dev lo table $TABLE_ID"
+        log Debug "[DRY-RUN] echo 1 > /proc/sys/net/ipv6/conf/all/forwarding"
+    else
+        ip6_rule del fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID" 2> /dev/null || true
+        ip6_route del local ::/0 dev lo table "$TABLE_ID" 2> /dev/null || true
+
+        if ! ip6_rule add fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID"; then
+            log Error "Failed to add IPv6 routing rule"
+            return 1
+        fi
+
+        if ! ip6_route add local ::/0 dev lo table "$TABLE_ID"; then
+            log Error "Failed to add IPv6 route"
+            ip6_rule del fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID" 2> /dev/null || true
+            return 1
+        fi
+
+        echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
+    fi
+
+    log Info "IPv6 routing setup completed"
+}
+
+# Unified cleanup function for both IPv4 and IPv6 with mode selection
+cleanup_chain() {
+    local family="$1"
+    local mode="$2"
+    local suffix=""
+    local cmd="iptables"
+
+    if [ "$family" = "6" ]; then
+        suffix="6"
+        cmd="ip6tables"
+    fi
+
+    # Set mode name for logging
+    local mode_name="$mode"
+    if [ "$mode" = "tproxy" ]; then
+        mode_name="TPROXY"
+    else
+        mode_name="REDIRECT"
+    fi
+
+    log Info "Cleaning up $mode_name chains for IPv${family}"
+
+    local table="mangle"
+    if [ "$mode" = "redirect" ]; then
+        table="nat"
+    fi
+
+    # Remove rules from main chains
+    $cmd -t "$table" -D "PROXY_PREROUTING$suffix" -j "BYPASS_IP$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_PREROUTING$suffix" -j "PROXY_INTERFACE$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_PREROUTING$suffix" -j "MAC_CHAIN$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_PREROUTING$suffix" -j "DNS_HIJACK_PRE$suffix" 2> /dev/null || true
+
+    $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "BYPASS_IP$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "BYPASS_INTERFACE$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "APP_CHAIN$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "GID_CHAIN$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D "PROXY_OUTPUT$suffix" -j "DNS_HIJACK_OUT$suffix" 2> /dev/null || true
+
+    if [ "$PROXY_TCP" -eq 1 ]; then
+        $cmd -t "$table" -D PREROUTING -p tcp -j "PROXY_PREROUTING$suffix" 2> /dev/null || true
+        $cmd -t "$table" -D OUTPUT -p tcp -j "PROXY_OUTPUT$suffix" 2> /dev/null || true
+    fi
+    if [ "$PROXY_UDP" -eq 1 ]; then
+        $cmd -t "$table" -D PREROUTING -p udp -j "PROXY_PREROUTING$suffix" 2> /dev/null || true
+        $cmd -t "$table" -D OUTPUT -p udp -j "PROXY_OUTPUT$suffix" 2> /dev/null || true
+    fi
+
+    # Define chains based on family
+    local chains=""
+    if [ "$family" = "6" ]; then
+        chains="PROXY_PREROUTING6 PROXY_OUTPUT6 BYPASS_IP6 BYPASS_INTERFACE6 PROXY_INTERFACE6 DNS_HIJACK_PRE6 DNS_HIJACK_OUT6 APP_CHAIN6 GID_CHAIN6 MAC_CHAIN6"
+    else
+        chains="PROXY_PREROUTING PROXY_OUTPUT BYPASS_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN GID_CHAIN MAC_CHAIN"
+    fi
+
+    # Clean up chains
+    for c in $chains; do
+        $cmd -t "$table" -F "$c" 2> /dev/null || true
+        $cmd -t "$table" -X "$c" 2> /dev/null || true
+    done
+
+    # Remove DNS rules if applicable
+    if [ "$mode" = "tproxy" ] && [ "$DNS_HIJACK_ENABLE" -eq 2 ]; then
+        $cmd -t nat -D PREROUTING -i "$MOBILE_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+        $cmd -t nat -D PREROUTING -i "$WIFI_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+        $cmd -t nat -D PREROUTING -i "$USB_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+        $cmd -t nat -D OUTPUT -p udp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT 2> /dev/null || true
+        $cmd -t nat -D OUTPUT -p tcp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT 2> /dev/null || true
+        $cmd -t nat -D OUTPUT -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+        $cmd -t nat -F "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+        $cmd -t nat -X "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+    fi
+
+    log Info "$mode_name chains for IPv${family} cleanup completed"
+}
+
+cleanup_tproxy_chain4() {
+    cleanup_chain 4 "tproxy"
+}
+
+cleanup_tproxy_chain6() {
+    cleanup_chain 6 "tproxy"
+}
+
+cleanup_redirect_chain4() {
+    cleanup_chain 4 "redirect"
+}
+
+cleanup_redirect_chain6() {
+    if ! check_kernel_feature "IP6_NF_NAT" || ! check_kernel_feature "IP6_NF_TARGET_REDIRECT"; then
+        log Warn "IPv6: Kernel does not support IPv6 NAT or REDIRECT, skipping IPv6 cleanup"
+        return 0
+    fi
+    cleanup_chain 6 "redirect"
+}
+
+cleanup_routing4() {
+    log Info "Cleaning up IPv4 routing rules"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip rule del fwmark $MARK_VALUE table $TABLE_ID pref $TABLE_ID"
+        log Debug "[DRY-RUN] ip route del local 0.0.0.0/0 dev lo table $TABLE_ID"
+        log Debug "[DRY-RUN] echo 0 > /proc/sys/net/ipv4/ip_forward"
+    else
+        ip_rule del fwmark "$MARK_VALUE" table "$TABLE_ID" pref "$TABLE_ID" 2> /dev/null || true
+        ip_route del local 0.0.0.0/0 dev lo table "$TABLE_ID" 2> /dev/null || true
+        echo 0 > /proc/sys/net/ipv4/ip_forward 2> /dev/null || true
+    fi
+
+    log Info "IPv4 routing cleanup completed"
+}
+
+cleanup_routing6() {
+    log Info "Cleaning up IPv6 routing rules"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ip -6 rule del fwmark $MARK_VALUE6 table $TABLE_ID pref $TABLE_ID"
+        log Debug "[DRY-RUN] ip -6 route del local ::/0 dev lo table $TABLE_ID"
+        log Debug "[DRY-RUN] echo 0 > /proc/sys/net/ipv6/conf/all/forwarding"
+    else
+        ip6_rule del fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID" 2> /dev/null || true
+        ip6_route del local ::/0 dev lo table "$TABLE_ID" 2> /dev/null || true
+        echo 0 > /proc/sys/net/ipv6/conf/all/forwarding 2> /dev/null || true
+    fi
+
+    log Info "IPv6 routing cleanup completed"
+}
+
+cleanup_ipset() {
+    if [ "$BYPASS_CN_IP" -eq 0 ]; then
+        log Debug "CN IP bypass is disabled, skipping ipset cleanup"
+        return 0
+    fi
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log Debug "[DRY-RUN] ipset destroy cnip"
+        log Debug "[DRY-RUN] ipset destroy cnip6"
+    else
+        ipset destroy cnip 2> /dev/null || true
+        ipset destroy cnip6 2> /dev/null || true
+        log Info "ipset 'cnip' and 'cnip6' destroyed"
+    fi
+}
+
+detect_proxy_mode() {
+    USE_TPROXY=0
+    case "$PROXY_MODE" in
+        auto)
+            if check_tproxy_support; then
+                USE_TPROXY=1
+                log Info "Kernel supports TPROXY, using TPROXY mode (auto)"
+            else
+                log Warn "Kernel does not support TPROXY, falling back to REDIRECT mode (auto)"
+            fi
+            ;;
+        TPROXY)
+            if check_tproxy_support; then
+                USE_TPROXY=1
+                log Info "Using TPROXY mode (forced by configuration)"
+            else
+                log Error "TPROXY mode forced but kernel does not support TPROXY"
+                exit 1
+            fi
+            ;;
+        REDIRECT)
+            log Info "Using REDIRECT mode (forced by configuration)"
+            ;;
+        *)
+            log Debug "Using Core mode"
+            exit 0
+            ;;
+    esac
+}
+
+start_proxy() {
+    log Info "Starting proxy setup..."
+    if [ "$BYPASS_CN_IP" -eq 1 ]; then
+        if ! check_kernel_feature "IP_SET" || ! check_kernel_feature "NETFILTER_XT_SET"; then
+            log Error "Kernel does not support ipset (CONFIG_IP_SET, CONFIG_NETFILTER_XT_SET). Cannot bypass CN IPs"
+            BYPASS_CN_IP=0
+        else
+            download_cn_ip_list || log Warn "Failed to download CN IP list, continuing without it"
+            if ! setup_cn_ipset; then
+                log Error "Failed to setup ipset, CN bypass disabled"
+                BYPASS_CN_IP=0
+            fi
+        fi
+    fi
+
+    if [ "$USE_TPROXY" -eq 1 ]; then
+        setup_tproxy_chain4
+        setup_routing4
+        if [ "$PROXY_IPV6" -eq 1 ]; then
+            setup_tproxy_chain6
+            setup_routing6
+        fi
+    else
+        setup_redirect_chain4
+        if [ "$PROXY_IPV6" -eq 1 ]; then
+            setup_redirect_chain6
+        fi
+    fi
+    log Info "Proxy setup completed"
+    oneplus_a16_fix
+    ping_fix enable
+    block_loopback_traffic enable
+}
+
+stop_proxy() {
+    log Info "Stopping proxy..."
+    if [ "$USE_TPROXY" -eq 1 ]; then
+        log Info "Cleaning up TPROXY chains"
+        cleanup_tproxy_chain4
+        cleanup_routing4
+        if [ "$PROXY_IPV6" -eq 1 ]; then
+            cleanup_tproxy_chain6
+            cleanup_routing6
+        fi
+    else
+        log Info "Cleaning up REDIRECT chains"
+        cleanup_redirect_chain4
+        if [ "$PROXY_IPV6" -eq 1 ]; then
+            cleanup_redirect_chain6
+        fi
+    fi
+    cleanup_ipset
+    log Info "Proxy stopped"
+    ping_fix disable
+    block_loopback_traffic disable
+}
+
+oneplus_a16_fix() {
+    iptables -t filter -F fw_INPUT
+    iptables -t filter -F fw_OUTPUT
+    iptables -t filter -F fw_OUTPUT_oplus_dns
+    ip6tables -t filter -F fw_INPUT
+    ip6tables -t filter -F fw_OUTPUT
+    ip6tables -t filter -F fw_OUTPUT_oplus_dns
+    log Info "OnePlus Android 16 filter rules cleaned for TProxy fix"
+}
+
+ping_fix() {
+    case "$1" in
+        enable)
+            iptables -t nat -A OUTPUT -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            iptables -t nat -A PREROUTING -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            if check_kernel_feature "IP6_NF_NAT"; then
+                ip6tables -t nat -A OUTPUT -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+                ip6tables -t nat -A PREROUTING -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            fi
+            log Info "ICMP redirection enabled for fake IP ranges (ping returns response, not necessarily valid)"
+            ;;
+        disable)
+            iptables -t nat -D OUTPUT -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            iptables -t nat -D PREROUTING -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            if check_kernel_feature "IP6_NF_NAT"; then
+                ip6tables -t nat -D OUTPUT -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+                ip6tables -t nat -D PREROUTING -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            fi
+            log Info "ICMP redirection disabled for fake IP ranges"
+            ;;
+    esac
+}
+
+# This rule blocks local access to tproxy-port to prevent traffic loopback.
+block_loopback_traffic() {
+    case "$1" in
+        enable)
+            ip6tables -t filter -A OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            iptables -t filter -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            ;;
+        disable)
+            ip6tables -t filter -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            ;;
+    esac
+}
+
+show_usage() {
+    cat << EOF
+Usage: $(basename "$0") {start|stop|restart} [--dry-run]
+
+Options:
+  --dry-run    Run without making actual changes
+  -h, --help   Show this help message
+EOF
+}
+
+parse_args() {
+    MAIN_CMD=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            start | stop | restart)
+                if [ -n "$MAIN_CMD" ]; then
+                    log Error "Multiple commands specified."
+                    exit 1
+                fi
+                MAIN_CMD="$1"
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                ;;
+            -h | --help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                log Error "Invalid argument: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$MAIN_CMD" ]; then
+        log Error "No command specified"
+        show_usage
+        exit 1
+    fi
+}
+
+main() {
+    load_config
+    if ! validate_config; then
+        log Error "Configuration validation failed"
+        exit 1
+    fi
+
+    check_root
+    check_dependencies
+
+    detect_proxy_mode
+
+    case "$MAIN_CMD" in
+        start)
+            start_proxy
+            ;;
+        stop)
+            stop_proxy
+            ;;
+        restart)
+            log Info "Restarting proxy..."
+            stop_proxy
+            sleep 2
+            start_proxy
+            log Info "Proxy restarted"
+            ;;
+        *)
+            log Error "Invalid command: $MAIN_CMD"
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+parse_args "$@"
+
+main
