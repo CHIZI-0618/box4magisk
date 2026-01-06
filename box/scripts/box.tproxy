@@ -1146,6 +1146,9 @@ start_proxy() {
         fi
     fi
     log Info "Proxy setup completed"
+    oneplus_a16_fix
+    ping_fix enable
+    block_loopback_traffic enable
 }
 
 stop_proxy() {
@@ -1167,6 +1170,55 @@ stop_proxy() {
     fi
     cleanup_ipset
     log Info "Proxy stopped"
+    ping_fix disable
+    block_loopback_traffic disable
+}
+
+oneplus_a16_fix() {
+    iptables -t filter -F fw_INPUT
+    iptables -t filter -F fw_OUTPUT
+    iptables -t filter -F fw_OUTPUT_oplus_dns
+    ip6tables -t filter -F fw_INPUT
+    ip6tables -t filter -F fw_OUTPUT
+    ip6tables -t filter -F fw_OUTPUT_oplus_dns
+    log Info "OnePlus Android 16 filter rules cleaned for TProxy fix"
+}
+
+ping_fix() {
+    case "$1" in
+        enable)
+            iptables -t nat -A OUTPUT -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            iptables -t nat -A PREROUTING -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            if check_kernel_feature "IP6_NF_NAT"; then
+                ip6tables -t nat -A OUTPUT -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+                ip6tables -t nat -A PREROUTING -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            fi
+            log Info "ICMP redirection enabled for fake IP ranges (ping returns response, not necessarily valid)"
+            ;;
+        disable)
+            iptables -t nat -D OUTPUT -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            iptables -t nat -D PREROUTING -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            if check_kernel_feature "IP6_NF_NAT"; then
+                ip6tables -t nat -D OUTPUT -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+                ip6tables -t nat -D PREROUTING -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            fi
+            log Info "ICMP redirection disabled for fake IP ranges"
+            ;;
+    esac
+}
+
+# This rule blocks local access to tproxy-port to prevent traffic loopback.
+block_loopback_traffic() {
+    case "$1" in
+        enable)
+            ip6tables -t filter -A OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            iptables -t filter -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            ;;
+        disable)
+            ip6tables -t filter -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
+            ;;
+    esac
 }
 
 show_usage() {
