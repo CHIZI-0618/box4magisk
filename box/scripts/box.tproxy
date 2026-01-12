@@ -142,12 +142,12 @@ check_root() {
 }
 
 check_dependencies() {
+    export PATH="$PATH:/data/data/com.termux/files/usr/bin"
+
     if [ "$DRY_RUN" -eq 1 ]; then
         log Debug "[DRY-RUN] Skip dependency check"
         return 0
     fi
-
-    export PATH="$PATH:/data/data/com.termux/files/usr/bin"
 
     local missing=""
     local required_commands="curl ip iptables"
