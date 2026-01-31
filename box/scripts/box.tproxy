@@ -150,7 +150,7 @@ check_dependencies() {
     fi
 
     local missing=""
-    local required_commands="curl ip iptables"
+    local required_commands="ip iptables curl"
     local cmd
 
     for cmd in $required_commands; do
@@ -373,7 +373,6 @@ download_cn_ip_list() {
 
     log Info "Checking/Downloading China mainland IP list to $CN_IP_FILE"
 
-    # Re-download if file doesn't exist or is older than 7 days
     if [ ! -f "$CN_IP_FILE" ]; then
         log Info "Fetching latest China IP list from $CN_IP_URL"
         if [ "$DRY_RUN" -eq 1 ]; then
@@ -440,6 +439,15 @@ setup_cn_ipset() {
     else
         ipset destroy cnip 2> /dev/null || true
         ipset destroy cnip6 2> /dev/null || true
+    fi
+
+    if [ -d "/tmp" ] && [ -w "/tmp" ]; then
+        export TMPDIR="/tmp"
+    elif [ -d "/data/local/tmp" ] && [ -w "/data/local/tmp" ]; then
+        export TMPDIR="/data/local/tmp"
+    else
+        mkdir -p "${scripts_dir}/tmp"
+        export TMPDIR="${scripts_dir}/tmp"
     fi
 
     if [ -f "$CN_IP_FILE" ]; then
@@ -532,9 +540,9 @@ setup_proxy_chain() {
     # Define chains based on family
     local chains=""
     if [ "$family" = "6" ]; then
-        chains="PROXY_PREROUTING6 PROXY_OUTPUT6 BYPASS_IP6 PROXY_IP6 BYPASS_INTERFACE6 PROXY_INTERFACE6 DNS_HIJACK_PRE6 DNS_HIJACK_OUT6 APP_CHAIN6 GID_CHAIN6 MAC_CHAIN6"
+        chains="PROXY_PREROUTING6 PROXY_OUTPUT6 PROXY_IP6 BYPASS_IP6 BYPASS_INTERFACE6 PROXY_INTERFACE6 DNS_HIJACK_PRE6 DNS_HIJACK_OUT6 APP_CHAIN6 GID_CHAIN6 MAC_CHAIN6"
     else
-        chains="PROXY_PREROUTING PROXY_OUTPUT BYPASS_IP PROXY_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN GID_CHAIN MAC_CHAIN"
+        chains="PROXY_PREROUTING PROXY_OUTPUT PROXY_IP BYPASS_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN GID_CHAIN MAC_CHAIN"
     fi
 
     local table="mangle"
@@ -565,15 +573,26 @@ setup_proxy_chain() {
             for subnet6 in $PROXY_IPv6_LIST; do
                 $cmd -t "$table" -A "PROXY_IP$suffix" -d "$subnet6" -j RETURN
             done
+            log Info "Added proxy rules for PROXY IPv6 ranges"
         fi
-        log Info "Added proxy rules for PROXY IPv6 ranges"
     else
         if [ -n "$PROXY_IPv4_LIST" ]; then
             for subnet4 in $PROXY_IPv4_LIST; do
                 $cmd -t "$table" -A "PROXY_IP$suffix" -d "$subnet4" -j RETURN
             done
+            log Info "Added proxy rules for PROXY IPv4 ranges"
         fi
-        log Info "Added proxy rules for PROXY IPv4 ranges"
+    fi
+
+    if check_kernel_feature "NETFILTER_XT_MATCH_ADDRTYPE"; then
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -m addrtype --dst-type LOCAL -p udp ! --dport 53 -j ACCEPT
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -m addrtype --dst-type LOCAL ! -p udp -j ACCEPT
+        log Info "Added local address type bypass"
+    fi
+
+    if check_kernel_feature "NETFILTER_XT_MATCH_CONNTRACK"; then
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -m conntrack --ctdir REPLY -j ACCEPT
+        log Info "Added reply connection direction bypass"
     fi
 
     if [ "$family" = "6" ]; then
@@ -588,17 +607,6 @@ setup_proxy_chain() {
             $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet4" ! -p udp -j ACCEPT
         done
         log Info "Added bypass rules for BYPASS IPv4 ranges"
-    fi
-
-    if check_kernel_feature "NETFILTER_XT_MATCH_ADDRTYPE"; then
-        $cmd -t "$table" -A "BYPASS_IP$suffix" -m addrtype --dst-type LOCAL -p udp ! --dport 53 -j ACCEPT
-        $cmd -t "$table" -A "BYPASS_IP$suffix" -m addrtype --dst-type LOCAL ! -p udp -j ACCEPT
-        log Info "Added local address type bypass"
-    fi
-
-    if check_kernel_feature "NETFILTER_XT_MATCH_CONNTRACK"; then
-        $cmd -t "$table" -A "BYPASS_IP$suffix" -m conntrack --ctdir REPLY -j ACCEPT
-        log Info "Added reply connection direction bypass"
     fi
 
     if [ "$BYPASS_CN_IP" -eq 1 ]; then
@@ -1023,7 +1031,7 @@ cleanup_chain() {
     # Define chains based on family
     local chains=""
     if [ "$family" = "6" ]; then
-        chains="PROXY_PREROUTING6 PROXY_OUTPUT6 BYPASS_IP6 PROXY_IP6 BYPASS_INTERFACE6 PROXY_INTERFACE6 DNS_HIJACK_PRE6 DNS_HIJACK_OUT6 APP_CHAIN6 GID_CHAIN6 MAC_CHAIN6"
+        chains="PROXY_PREROUTING6 PROXY_OUTPUT6 PROXY_IP6 BYPASS_IP6 BYPASS_INTERFACE6 PROXY_INTERFACE6 DNS_HIJACK_PRE6 DNS_HIJACK_OUT6 APP_CHAIN6 GID_CHAIN6 MAC_CHAIN6"
     else
         chains="PROXY_PREROUTING PROXY_OUTPUT BYPASS_IP PROXY_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN GID_CHAIN MAC_CHAIN"
     fi
