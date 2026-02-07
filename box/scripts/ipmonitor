@@ -1,0 +1,162 @@
+#!/system/bin/sh
+
+# ==============================================================================
+# [ IP Monitor ]
+# Description: Real-time network address monitoring and Selective Routing Injection.
+# ==============================================================================
+
+scripts=$(realpath "$0")
+scripts_dir=$(dirname "${scripts}")
+
+source "${scripts_dir}/box.config"
+
+# Constants
+readonly SRI_RULE_PREF=1900
+readonly MONITOR_PID_FILE="${run_path}/ipmonitor.pid"
+readonly LOG_FILE="${run_path}/run.log"
+
+export TZ=Asia/Shanghai
+
+# ==============================================================================
+# [ Logging ]
+# ==============================================================================
+
+log() {
+    local level="$1"
+    local message="$2"
+    local timestamp
+    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+    printf "%s [%s]: %s\n" "${timestamp}" "${level}" "${message}" >> "${LOG_FILE}"
+}
+
+# ==============================================================================
+# [ SRI Cleanup ]
+# ==============================================================================
+
+# Priority-Sweep: Remove all rules matching the SRI priority
+_sri_cleanup() {
+    log "Debug" "SRI: Priority-Sweep (pref ${SRI_RULE_PREF})..."
+    { ip rule show; ip -6 rule show; } 2>/dev/null | awk -v pref="${SRI_RULE_PREF}" -F: '
+        $1 == pref {
+            sub(/^[ \t]*/, "", $2)
+            cmd = ($2 ~ /:/) ? "ip -6 rule del " : "ip rule del "
+            system(cmd $2 " 2>/dev/null")
+        }'
+    return 0
+}
+
+# ==============================================================================
+# [ SRI Monitor - Unified AWK Engine ]
+# ==============================================================================
+
+start_monitor() {
+    _sri_cleanup
+
+    log "Info" "IP Monitor (SRI) started"
+
+    # Unified Engine: Initial sync + real-time monitoring.
+    (
+        trap 'exit 0' TERM
+        {
+            ip -o addr show 2>/dev/null
+            echo "---MONITOR_START---"
+            exec ip -o monitor address 2>/dev/null
+        } | awk -v proxy_ipv6="${PROXY_IPV6}" \
+                -v pref="${SRI_RULE_PREF}" \
+                -v log_file="${LOG_FILE}" '
+        # Efficient logging: Use date command only when needed
+        function log_debug(tag, ip,    ds, cmd) {
+            cmd = "date +\"[%m-%d %H:%M:%S]\""
+            if ((cmd | getline ds) > 0) {
+                printf "%s [Debug]: SRI %s %s\n", ds, tag, ip >> log_file
+                fflush(log_file)
+            }
+            close(cmd)
+        }
+        function add_rule(ip) {
+            if (ip in ips) return
+            ips[ip] = 1
+            cmd = (ip ~ /:/) ? "ip -f inet6 " : "ip "
+            system(cmd "rule add to " ip " lookup main pref " pref " 2>/dev/null")
+            log_debug("-A", ip)
+        }
+        function del_rule(ip) {
+            if (!(ip in ips)) return
+            delete ips[ip]
+            cmd = (ip ~ /:/) ? "ip -f inet6 " : "ip "
+            system(cmd "rule del to " ip " lookup main pref " pref " 2>/dev/null")
+            log_debug("-D", ip)
+        }
+        function extract_ip(line, proto,    i, n, fields, p) {
+            n = split(line, fields, " ")
+            for (i=1; i<=n; i++) {
+                if (fields[i] == proto) {
+                    split(fields[i+1], p, "/")
+                    return p[1]
+                }
+            }
+            return ""
+        }
+        function is_valid(ip) {
+            return (ip != "" && ip !~ /^(127\.|0\.|fe80:|::1)/)
+        }
+        function is_temporary(line) {
+            return (line ~ / temporary/)
+        }
+        # Phase 1: Initial Sync
+        !/---MONITOR_START---/ && !monitor_mode {
+            if (is_temporary($0)) next
+            ip = extract_ip($0, "inet")
+            if (!is_valid(ip) && proxy_ipv6 == "1") ip = extract_ip($0, "inet6")
+            if (is_valid(ip)) add_rule(ip)
+            next
+        }
+        # Transition/Phase 2: Monitor
+        /---MONITOR_START---/ { monitor_mode = 1; next }
+        monitor_mode {
+            if (is_temporary($0)) next
+            is_del = ($0 ~ /Deleted/)
+            ip = extract_ip($0, "inet")
+            if (!is_valid(ip) && proxy_ipv6 == "1") ip = extract_ip($0, "inet6")
+            if (!is_valid(ip)) next
+            if (is_del) del_rule(ip)
+            else add_rule(ip)
+        }
+        '
+    ) 2>/dev/null &
+    
+    echo "$!" > "${MONITOR_PID_FILE}"
+    return 0
+}
+
+stop_monitor() {
+    local pid
+    pid=$(cat "${MONITOR_PID_FILE}" 2>/dev/null)
+    log "Info" "Stopping IP Monitor (SRI)..."
+    if [ -n "${pid}" ]; then
+        pkill -P "${pid}" 2>/dev/null || true
+        kill -TERM "${pid}" 2>/dev/null || true
+        rm -f "${MONITOR_PID_FILE}"
+    fi
+    _sri_cleanup
+    return 0
+}
+
+main() {
+    local action="${1:-}"
+
+    case "${action}" in
+        start)
+            start_monitor
+            ;;
+        stop)
+            stop_monitor
+            ;;
+        *)
+            echo "Usage: $0 {start|stop}"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
