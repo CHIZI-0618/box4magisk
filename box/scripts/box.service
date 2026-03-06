@@ -274,7 +274,7 @@ tun_forward_ip_rules_del() {
 
 sing_tun_ip_rules() {
     ip rule $1 from all iif ${tun_device} lookup main suppress_prefixlength 0 pref 8000
-    ip rule $1 lookup main pref 7000
+    ip rule $1 lookup main pref 9005
 }
 
 tun_forward_iptables_rules() {
