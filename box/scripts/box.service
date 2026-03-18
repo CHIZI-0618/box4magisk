@@ -321,17 +321,23 @@ case "$1" in
     start)
         save_private_dns
         display_bin_status || start_service
-        [ $? = "0" ] && tun_forward_enable
+        if [ $? = "0" ]; then
+            tun_forward_enable
+            ${scripts_dir}/ipmonitor start
+        fi
         ;;
     stop)
+        ${scripts_dir}/ipmonitor stop
         stop_service
         tun_forward_disable
         restore_private_dns
         ;;
     restart)
+        ${scripts_dir}/ipmonitor stop
         stop_service
         sleep 2
         start_service
+        ${scripts_dir}/ipmonitor start
         ;;
     status)
         display_bin_status
