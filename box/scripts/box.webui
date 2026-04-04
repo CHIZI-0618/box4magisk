@@ -1,0 +1,411 @@
+#!/system/bin/sh
+
+export PATH="/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:$PATH:/data/data/com.termux/files/usr/bin"
+
+scripts=$(realpath "$0")
+scripts_dir=$(dirname "$scripts")
+
+CONFIG_FILE="${scripts_dir}/box.config"
+SERVICE_SCRIPT="${scripts_dir}/box.service"
+MODULE_ROOT="/data/adb/modules/box4"
+
+[ -n "$(magisk -v 2>/dev/null | grep lite)" ] && MODULE_ROOT="/data/adb/lite_modules/box4"
+
+json_escape() {
+    printf '%s' "$1" | sed \
+        -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e 's/	/\\t/g' \
+        -e 's/\r/\\r/g' \
+        -e ':a;N;$!ba;s/\n/\\n/g'
+}
+
+json_bool() {
+    case "$1" in
+        1|true|TRUE|yes|YES|on|ON) printf 'true' ;;
+        *) printf 'false' ;;
+    esac
+}
+
+validate_key_name() {
+    case "$1" in
+        ''|*[!A-Za-z0-9_]*|[0-9]*)
+            emit_error "invalid config key: $1" "${2:-unknown}"
+            ;;
+    esac
+}
+
+shell_quote_value() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+kernel_feature_enabled() {
+    local feature="$1"
+    local config_name="CONFIG_${feature}"
+
+    if [ -f /proc/config.gz ]; then
+        zcat /proc/config.gz 2>/dev/null | grep -qE "^${config_name}=[ym]$"
+        return $?
+    fi
+
+    return 2
+}
+
+feature_json() {
+    local name="$1"
+    local available="$2"
+    local reason="$3"
+
+    printf '{"available":%s,"reason":"%s"}' \
+        "$available" \
+        "$(json_escape "$reason")"
+}
+
+emit_error() {
+    local message="${1:-unknown error}"
+    local command="${2:-unknown}"
+    printf '{"ok":false,"command":"%s","error":"%s"}\n' \
+        "$(json_escape "$command")" \
+        "$(json_escape "$message")"
+    exit 1
+}
+
+emit_ok() {
+    local command="$1"
+    local data="$2"
+    printf '{"ok":true,"command":"%s","data":%s}\n' \
+        "$(json_escape "$command")" \
+        "${data:-null}"
+}
+
+queue_service_action() {
+    local action="$1"
+    local request_dir="/data/adb/box/run/webui_service_queue"
+    local request_file="${request_dir}/$(date +%s).$$.${action}.req"
+
+    mkdir -p "$request_dir" || emit_error "failed to prepare request queue" "service"
+    printf '%s\n' "$action" > "$request_file" || emit_error "failed to enqueue service action" "service"
+}
+
+require_key() {
+    [ -n "$1" ] || emit_error "missing config key" "$2"
+    validate_key_name "$1" "$2"
+}
+
+config_has_key() {
+    grep -q "^$1=" "$CONFIG_FILE"
+}
+
+config_get_raw() {
+    sed -n "s/^$1=//p" "$CONFIG_FILE" | head -n 1
+}
+
+config_get_clean() {
+    local value
+    value="$(config_get_raw "$1")"
+    case "$value" in
+        \"*\")
+            value="${value#\"}"
+            value="${value%\"}"
+            ;;
+        \'*\')
+            value="${value#\'}"
+            value="${value%\'}"
+            ;;
+    esac
+    printf '%s' "$value"
+}
+
+replace_config_line() {
+    local key="$1"
+    local replacement="$2"
+    local tmp_file="${CONFIG_FILE}.tmp.$$"
+
+    awk -v key="$key" -v replacement="$replacement" '
+        index($0, key "=") == 1 {
+            print replacement
+            next
+        }
+        { print }
+    ' "$CONFIG_FILE" > "$tmp_file" || emit_error "failed to update config" "config-write"
+
+    mv "$tmp_file" "$CONFIG_FILE" || emit_error "failed to replace config" "config-write"
+}
+
+config_set() {
+    local key="$1"
+    local value="$2"
+    local shell_quoted
+
+    require_key "$key" "set-config"
+    config_has_key "$key" || emit_error "unknown config key: $key" "set-config"
+
+    shell_quoted="$(shell_quote_value "$value")"
+    replace_config_line "$key" "${key}=${shell_quoted}"
+}
+
+config_set_numeric() {
+    local key="$1"
+    local value="$2"
+
+    require_key "$key" "set-number"
+    config_has_key "$key" || emit_error "unknown config key: $key" "set-number"
+    case "$value" in
+        ''|*[!0-9-]*)
+            emit_error "numeric value required for $key" "set-number"
+            ;;
+    esac
+    replace_config_line "$key" "${key}=${value}"
+}
+
+validate_toggle_request() {
+    local key="$1"
+    local value="$2"
+
+    [ "$value" = "1" ] || return 0
+
+    case "$key" in
+        BYPASS_CN_IP)
+            if ! command_exists ipset; then
+                emit_error "ipset command not found, cannot enable BYPASS_CN_IP" "toggle"
+            fi
+            if ! kernel_feature_enabled "IP_SET"; then
+                emit_error "kernel does not support CONFIG_IP_SET, cannot enable BYPASS_CN_IP" "toggle"
+            fi
+            if ! kernel_feature_enabled "NETFILTER_XT_SET"; then
+                emit_error "kernel does not support CONFIG_NETFILTER_XT_SET, cannot enable BYPASS_CN_IP" "toggle"
+            fi
+            ;;
+        PROXY_IPV6)
+            if [ "$(config_get_clean "PROXY_MODE")" = "REDIRECT" ]; then
+                if ! kernel_feature_enabled "IP6_NF_NAT"; then
+                    emit_error "kernel does not support CONFIG_IP6_NF_NAT, cannot enable PROXY_IPV6 in REDIRECT mode" "toggle"
+                fi
+                if ! kernel_feature_enabled "IP6_NF_TARGET_REDIRECT"; then
+                    emit_error "kernel does not support CONFIG_IP6_NF_TARGET_REDIRECT, cannot enable PROXY_IPV6 in REDIRECT mode" "toggle"
+                fi
+            fi
+            ;;
+    esac
+}
+
+service_running() {
+    . "$CONFIG_FILE"
+    busybox pidof "$bin_name" >/dev/null 2>&1
+}
+
+cmd_status() {
+    . "$CONFIG_FILE"
+
+    local running=false
+    local pid=""
+
+    if service_running; then
+        running=true
+        pid="$(busybox pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
+    fi
+
+    emit_ok "status" "$(cat <<EOF
+{"running":$running,"pid":"$(json_escape "$pid")","bin_name":"$(json_escape "$bin_name")","proxy_mode":"$(json_escape "$PROXY_MODE")","app_proxy_enable":$(json_bool "$APP_PROXY_ENABLE"),"app_proxy_mode":"$(json_escape "$APP_PROXY_MODE")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")","config_file":"$(json_escape "$CONFIG_FILE")","module_root":"$(json_escape "$MODULE_ROOT")"}
+EOF
+)"
+}
+
+cmd_get_config() {
+    . "$CONFIG_FILE"
+
+emit_ok "get-config" "$(cat <<EOF
+{"bin_name":"$(json_escape "$bin_name")","CORE_USER_GROUP":"$(json_escape "$CORE_USER_GROUP")","PROXY_MODE":"$(json_escape "$PROXY_MODE")","PROXY_TCP_PORT":"$(json_escape "$PROXY_TCP_PORT")","PROXY_UDP_PORT":"$(json_escape "$PROXY_UDP_PORT")","DNS_HIJACK_ENABLE":$DNS_HIJACK_ENABLE,"DNS_PORT":"$(json_escape "$DNS_PORT")","MOBILE_INTERFACE":"$(json_escape "$MOBILE_INTERFACE")","WIFI_INTERFACE":"$(json_escape "$WIFI_INTERFACE")","HOTSPOT_INTERFACE":"$(json_escape "$HOTSPOT_INTERFACE")","USB_INTERFACE":"$(json_escape "$USB_INTERFACE")","PROXY_MOBILE":$PROXY_MOBILE,"PROXY_WIFI":$PROXY_WIFI,"PROXY_HOTSPOT":$PROXY_HOTSPOT,"PROXY_USB":$PROXY_USB,"PROXY_TCP":$PROXY_TCP,"PROXY_UDP":$PROXY_UDP,"PROXY_IPV6":$PROXY_IPV6,"APP_PROXY_ENABLE":$APP_PROXY_ENABLE,"APP_PROXY_MODE":"$(json_escape "$APP_PROXY_MODE")","PROXY_APPS_LIST":"$(json_escape "$PROXY_APPS_LIST")","BYPASS_APPS_LIST":"$(json_escape "$BYPASS_APPS_LIST")","GID_PROXY_ENABLE":$GID_PROXY_ENABLE,"GID_PROXY_MODE":"$(json_escape "$GID_PROXY_MODE")","PROXY_GIDS_LIST":"$(json_escape "$PROXY_GIDS_LIST")","BYPASS_GIDS_LIST":"$(json_escape "$BYPASS_GIDS_LIST")","BYPASS_CN_IP":$BYPASS_CN_IP,"BLOCK_QUIC":$BLOCK_QUIC,"MAC_FILTER_ENABLE":$MAC_FILTER_ENABLE,"MAC_PROXY_MODE":"$(json_escape "$MAC_PROXY_MODE")","PROXY_MACS_LIST":"$(json_escape "$PROXY_MACS_LIST")","BYPASS_MACS_LIST":"$(json_escape "$BYPASS_MACS_LIST")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")"}
+EOF
+)"
+}
+
+cmd_set_config() {
+    local key="$1"
+    shift
+    local value="$*"
+
+    [ -n "$value" ] || emit_error "missing config value" "set-config"
+    config_set "$key" "$value"
+
+    emit_ok "set-config" "{\"key\":\"$(json_escape "$key")\",\"value\":\"$(json_escape "$(config_get_clean "$key")")\"}"
+}
+
+cmd_toggle() {
+    local key="$1"
+    local value="$2"
+
+    case "$value" in
+        0|1) ;;
+        *) emit_error "toggle value must be 0 or 1" "toggle" ;;
+    esac
+
+    validate_toggle_request "$key" "$value"
+    config_set_numeric "$key" "$value"
+    emit_ok "toggle" "{\"key\":\"$(json_escape "$key")\",\"value\":$value}"
+}
+
+cmd_set_number() {
+    local key="$1"
+    local value="$2"
+
+    [ -n "$value" ] || emit_error "missing numeric value" "set-number"
+    config_set_numeric "$key" "$value"
+    emit_ok "set-number" "{\"key\":\"$(json_escape "$key")\",\"value\":$value}"
+}
+
+cmd_capabilities() {
+    local ipset_cmd=true
+    local config_gz=true
+    local tproxy=true
+    local ipset_kernel=true
+    local xt_set=true
+    local ip6_nat=true
+    local ip6_redirect=true
+    local tproxy_reason="ok"
+    local cn_ip_reason="ok"
+    local ipv6_redirect_reason="ok"
+
+    if ! command_exists ipset; then
+        ipset_cmd=false
+    fi
+
+    if [ ! -f /proc/config.gz ]; then
+        config_gz=false
+        tproxy=false
+        ipset_kernel=false
+        xt_set=false
+        ip6_nat=false
+        ip6_redirect=false
+        tproxy_reason="/proc/config.gz not available"
+        cn_ip_reason="/proc/config.gz not available"
+        ipv6_redirect_reason="/proc/config.gz not available"
+    else
+        kernel_feature_enabled "NETFILTER_XT_TARGET_TPROXY" || {
+            tproxy=false
+            tproxy_reason="CONFIG_NETFILTER_XT_TARGET_TPROXY missing"
+        }
+        kernel_feature_enabled "IP_SET" || ipset_kernel=false
+        kernel_feature_enabled "NETFILTER_XT_SET" || xt_set=false
+        kernel_feature_enabled "IP6_NF_NAT" || ip6_nat=false
+        kernel_feature_enabled "IP6_NF_TARGET_REDIRECT" || ip6_redirect=false
+
+        if [ "$ipset_kernel" != true ] || [ "$xt_set" != true ]; then
+            cn_ip_reason="CONFIG_IP_SET or CONFIG_NETFILTER_XT_SET missing"
+        fi
+        if [ "$ip6_nat" != true ] || [ "$ip6_redirect" != true ]; then
+            ipv6_redirect_reason="CONFIG_IP6_NF_NAT or CONFIG_IP6_NF_TARGET_REDIRECT missing"
+        fi
+    fi
+
+    if [ "$ipset_cmd" != true ] && [ "$cn_ip_reason" = "ok" ]; then
+        cn_ip_reason="ipset command not found"
+    fi
+
+    emit_ok "capabilities" "$(cat <<EOF
+{"commands":{"ipset":$ipset_cmd},"kernel":{"config_gz":$config_gz,"tproxy":$tproxy,"ip_set":$ipset_kernel,"xt_set":$xt_set,"ip6_nf_nat":$ip6_nat,"ip6_nf_target_redirect":$ip6_redirect},"features":{"BYPASS_CN_IP":$(feature_json "BYPASS_CN_IP" "$( [ "$ipset_cmd" = true ] && [ "$ipset_kernel" = true ] && [ "$xt_set" = true ] && printf true || printf false )" "$cn_ip_reason"),"TPROXY":$(feature_json "TPROXY" "$tproxy" "$tproxy_reason"),"IPV6_REDIRECT":$(feature_json "IPV6_REDIRECT" "$( [ "$ip6_nat" = true ] && [ "$ip6_redirect" = true ] && printf true || printf false )" "$ipv6_redirect_reason")}}
+EOF
+)"
+}
+
+cmd_service() {
+    local action="$1"
+
+    case "$action" in
+        start|stop|restart|status) ;;
+        *) emit_error "unsupported service action: $action" "service" ;;
+    esac
+
+    if [ "$action" = "start" ] || [ "$action" = "restart" ]; then
+        queue_service_action "$action"
+        emit_ok "service" "{\"action\":\"$(json_escape "$action")\",\"async\":true,\"output\":\"scheduled\"}"
+        return 0
+    fi
+
+    local output
+    output="$("$SERVICE_SCRIPT" "$action" 2>&1)"
+    local exit_code=$?
+
+    if [ "$exit_code" -ne 0 ]; then
+        emit_error "$output" "service"
+    fi
+
+    emit_ok "service" "{\"action\":\"$(json_escape "$action")\",\"output\":\"$(json_escape "$output")\"}"
+}
+
+cmd_apps() {
+    . "$CONFIG_FILE"
+
+    local proxy_list bypass_list
+    proxy_list="$(json_escape "$PROXY_APPS_LIST")"
+    bypass_list="$(json_escape "$BYPASS_APPS_LIST")"
+
+    emit_ok "apps" "{\"enabled\":$(json_bool "$APP_PROXY_ENABLE"),\"mode\":\"$(json_escape "$APP_PROXY_MODE")\",\"proxy_apps\":\"$proxy_list\",\"bypass_apps\":\"$bypass_list\"}"
+}
+
+cmd_set_apps() {
+    local mode="$1"
+    shift
+    local value="$*"
+
+    case "$mode" in
+        whitelist)
+            config_set "APP_PROXY_MODE" "whitelist"
+            config_set_numeric "APP_PROXY_ENABLE" 1
+            config_set "PROXY_APPS_LIST" "$value"
+            ;;
+        blacklist)
+            config_set "APP_PROXY_MODE" "blacklist"
+            config_set_numeric "APP_PROXY_ENABLE" 1
+            config_set "BYPASS_APPS_LIST" "$value"
+            ;;
+        disable)
+            config_set_numeric "APP_PROXY_ENABLE" 0
+            ;;
+        *)
+            emit_error "apps mode must be whitelist, blacklist or disable" "set-apps"
+            ;;
+    esac
+
+    cmd_apps
+}
+
+cmd_mihomo_panel_url() {
+    . "$CONFIG_FILE"
+
+    local host port secret scheme external_controller panel_url
+    host="${1:-127.0.0.1}"
+    port="${2:-$clash_api_port}"
+    secret="${3:-$clash_api_secret}"
+    scheme="${4:-http}"
+    external_controller="${scheme}://${host}:${port}"
+    panel_url="https://yacd.metacubex.one/#/setup?hostname=$(json_escape "$host")&port=$(json_escape "$port")&secret=$(json_escape "$secret")&https=$( [ "$scheme" = "https" ] && printf true || printf false )"
+
+    emit_ok "mihomo-panel-url" "{\"host\":\"$(json_escape "$host")\",\"port\":\"$(json_escape "$port")\",\"secret\":\"$(json_escape "$secret")\",\"external_controller\":\"$(json_escape "$external_controller")\",\"panel_url\":\"$panel_url\"}"
+}
+
+cmd_help() {
+    emit_ok "help" '["status","get-config","set-config KEY VALUE","set-number KEY VALUE","toggle KEY 0|1","service start|stop|restart|status","apps","set-apps whitelist|blacklist|disable [LIST]","mihomo-panel-url [HOST] [PORT] [SECRET] [http|https]","capabilities"]'
+}
+
+command="$1"
+shift 2>/dev/null || true
+
+case "$command" in
+    status) cmd_status ;;
+    get-config) cmd_get_config ;;
+    set-config) cmd_set_config "$@" ;;
+    set-number) cmd_set_number "$@" ;;
+    toggle) cmd_toggle "$@" ;;
+    service) cmd_service "$@" ;;
+    apps) cmd_apps ;;
+    set-apps) cmd_set_apps "$@" ;;
+    mihomo-panel-url) cmd_mihomo_panel_url "$@" ;;
+    capabilities) cmd_capabilities ;;
+    help|"") cmd_help ;;
+    *) emit_error "unsupported command: $command" "$command" ;;
+esac

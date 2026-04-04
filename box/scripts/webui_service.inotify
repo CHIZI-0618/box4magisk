@@ -1,0 +1,63 @@
+#!/system/bin/sh
+
+export PATH="/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:$PATH:/data/data/com.termux/files/usr/bin"
+
+scripts=$(realpath "$0")
+scripts_dir=$(dirname "$scripts")
+
+source "${scripts_dir}/box.config"
+
+service_path="${scripts_dir}/box.service"
+tproxy_path="${scripts_dir}/box.tproxy"
+
+events="$1"
+monitor_dir="$2"
+monitor_file="$3"
+
+queue_dir="${run_path}/webui_service_queue"
+
+log_line() {
+    printf '%s [Info]: %s\n' "$(date +"%Y-%m-%d %H:%M:%S")" "$1" >> "${run_path}/run.log"
+}
+
+process_request() {
+    local request_path="$1"
+    [ -f "${request_path}" ] || return 0
+
+    action="$(cat "${request_path}" 2>/dev/null | tr -d '\r\n')"
+    rm -f "${request_path}"
+
+    case "${action}" in
+        start)
+            log_line "webui queued service action: start"
+            "${service_path}" start >> /dev/null 2>> "${run_path}/run.log" \
+                && "${tproxy_path}" start >> /dev/null 2>> "${run_path}/run.log"
+            ;;
+        stop)
+            log_line "webui queued service action: stop"
+            "${tproxy_path}" stop >> /dev/null 2>> "${run_path}/run.log"
+            "${service_path}" stop >> /dev/null 2>> "${run_path}/run.log"
+            ;;
+        restart)
+            log_line "webui queued service action: restart"
+            "${tproxy_path}" stop >> /dev/null 2>> "${run_path}/run.log"
+            "${service_path}" restart >> /dev/null 2>> "${run_path}/run.log" \
+                && "${tproxy_path}" start >> /dev/null 2>> "${run_path}/run.log"
+            ;;
+        *)
+            log_line "webui queued service action ignored: ${action:-unknown}"
+            ;;
+    esac
+}
+
+handle_request() {
+    [ -d "${queue_dir}" ] || return 0
+
+    for request_path in "${queue_dir}"/*.req; do
+        [ -e "${request_path}" ] || return 0
+        process_request "${request_path}"
+    done
+}
+
+mkdir -p "${queue_dir}"
+handle_request
