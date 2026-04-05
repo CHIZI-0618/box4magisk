@@ -7,8 +7,10 @@
 支持的透明代理模式：
 - **REDIRECT**：仅 TCP
 - **TPROXY**：TCP + UDP（默认优先）
-- **TUN**：TCP + UDP（由核心提供，仅 sing-box、clash、mihomo 支持）
+- **TUN**：TCP + UDP（由核心提供，仅 sing-box、clash、mihomo、xray 支持）
 - **混合模式**：REDIRECT (TCP) + TUN (UDP)
+
+本项目本质为代理核心启动器加 [AndroidTProxyShell](https://github.com/CHIZI-0618/AndroidTProxyShell) 实现透明代理
 
 ## 免责声明
 
@@ -23,7 +25,6 @@
 1. 从 [Releases](https://github.com/CHIZI-0618/box4magisk/releases) 下载最新模块 ZIP 包。
 2. 在 Magisk Manager、KernelSU Manager 或 APatch Manager 中安装。
 3. 支持在线更新（更新后无需重启即可生效）。
-4. 更新模块时会自动备份用户配置，并合并到新版本的 `/data/adb/box/scripts/box.config`（建议更新后检查并清理重复/废弃字段）。
 
 **注意**：模块不包含任何代理核心二进制文件。
 
@@ -54,16 +55,15 @@
 
 模块会自动检查配置文件合法性，结果保存在 `/data/adb/box/run/check.log`。
 
-### box.config 主要配置项说明
+### 主要配置项说明
 
-以下是 `/data/adb/box/scripts/box.config` 的关键选项。这些选项支持灵活组合，例如您可以选择仅代理移动数据和 WiFi，而不代理热点和 USB 共享。网络接口代理支持任意组合搭配（如仅代理 WiFi + 热点，或仅代理移动数据 + USB），但必须正确配置对应的 `*_INTERFACE` 变量（例如 `MOBILE_INTERFACE="rmnet_data+"`、`WIFI_INTERFACE="wlan0"`、`HOTSPOT_INTERFACE="wlan2"`、`USB_INTERFACE="rndis+"`），以匹配设备实际接口名（可用 `ifconfig` 或 `ip link` 检查）。
+以下是 `/data/adb/box/scripts/tproxy.conf` 的关键选项。须注意正确配置 `*_INTERFACE` 变量（例如 `MOBILE_INTERFACE="rmnet_data+"`、`WIFI_INTERFACE="wlan0"`、`HOTSPOT_INTERFACE="wlan2"`、`USB_INTERFACE="rndis+"`），以匹配设备实际接口名（可用 `ifconfig` 或 `ip link` 检查）。
 
 | 配置项                  | 默认值          | 说明 |
 |-------------------------|-----------------|------|
-| `bin_name`             | `sing-box`     | 选择启用的代理核心（决定模块行为） |
-| `CORE_USER_GROUP`      | `root:net_admin` | 核心运行的用户组（高级用户可修改为自定义 UID:GID，需要 setcap 支持） |
+| `CORE_USER_GROUP`         | `root:net_admin` | 代理核心运行的用户与用户组，高级用户可以自定义，需要 setcap 的支持，**请与 box.config 中的 `box_user_group` 变量值一致** |
 | `PROXY_TCP_PORT` / `PROXY_UDP_PORT` | `1536` | 透明代理监听端口 |
-| `PROXY_MODE`           | `auto`         | 代理模式：`auto`（优先 TPROXY）、`TPROXY`、`REDIRECT`、`core`（仅启动核心，支持原生 TUN） |
+| `PROXY_MODE`           | `0`         | 代理模式：`0=auto`（优先 TPROXY）、`1=TPROXY`、`2=REDIRECT`、`任意值`（仅启动核心，以支持原生 TUN） |
 | `DNS_HIJACK_ENABLE`    | `1`            | DNS 劫持（0=禁用，1=启用 TPROXY，2=启用 REDIRECT，非必要无需改动） |
 | `DNS_PORT`             | `1053`         | DNS 监听端口 |
 | `MOBILE_INTERFACE`     | `rmnet_data+`  | 移动数据接口名 |
@@ -78,15 +78,14 @@
 | `PROXY_IPV6`           | `0`            | 是否代理 IPv6（1=代理，0=禁用；在 REDIRECT 模式下，模块会自动检查内核对 `IP6_NF_NAT` 和 `IP6_NF_TARGET_REDIRECT` 的支持，若不支持则 IPv6 代理将失效） |
 | `APP_PROXY_ENABLE`     | `0`            | 启用按应用代理（1=启用） |
 | `APP_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定应用）或 `whitelist`（仅代理指定应用） |
-| `BYPASS_APPS_LIST` / `PROXY_APPS_LIST` | 空 | 应用列表，格式：`"用户ID:包名"`（多条用空格分隔，例如 `"0:com.android.systemui" "10:com.tencent.mm"`） |
-| `GID_PROXY_ENABLE`     | `0`            | 启用按进程 GID 代理（高级） |
-| `GID_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定 GID）或 `whitelist`（仅代理指定 GID） |
-| `BYPASS_GIDS_LIST` / `PROXY_GIDS_LIST` | 空 | GID 列表（多条用空格分隔） |
+| `BYPASS_APPS_LIST` / `PROXY_APPS_LIST` | 空 | 应用列表，格式：`"用户ID:包名"`（多条用空格分隔，例如 `"0:com.android.systemui 10:com.tencent.mm"`） |
 | `BYPASS_CN_IP`         | `0`            | 是否绕过中国大陆 IP（1=启用，0=禁用；需要内核支持 `ipset`，模块会自动检查支持情况，若不支持则功能失效；启用后会从指定 URL 下载 IP 列表） |
 | `MAC_FILTER_ENABLE`    | `0`            | 启用 MAC 地址过滤（1=启用，0=禁用；仅在热点模式 `PROXY_HOTSPOT=1` 下生效） |
 | `MAC_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定 MAC）或 `whitelist`（仅代理指定 MAC） |
-| `BYPASS_MACS_LIST` / `PROXY_MACS_LIST` | 空 | MAC 地址列表（多条用空格分隔，例如 `"AA:BB:CC:DD:EE:FF" "11:22:33:44:55:66"`） |
+| `BYPASS_MACS_LIST` / `PROXY_MACS_LIST` | 空 | MAC 地址列表（多条用空格分隔，例如 `"AA:BB:CC:DD:EE:FF 11:22:33:44:55:66"`） |
 
+其他配置项请参照 [AndroidTProxyShell](https://github.com/CHIZI-0618/AndroidTProxyShell?tab=readme-ov-file#full-configuration-variables)
+  
 ## 使用方法
 
 ### 常规使用（推荐）
@@ -102,13 +101,7 @@
 
 #### 仅使用核心原生 TUN（不透明代理）
 
-设置 `PROXY_MODE=core`，透明代理规则将不加载，仅启动核心（适用于 sing-box/clash/mihomo 的 TUN 入站）。
-
-### 高级用法
-
-- **强制 REDIRECT 模式**：`PROXY_MODE=REDIRECT`（UDP 不代理，除非核心启用 TUN）。
-- **代理热点**：`PROXY_HOTSPOT=1`（需正确设置 `HOTSPOT_INTERFACE`；此时 MAC 过滤生效，可用于控制热点连接设备的代理）。
-- **按进程 GID 分流**：启用 `GID_PROXY_ENABLE=1`，使用 `PROXY_GIDS_LIST` 或 `BYPASS_GIDS_LIST`。
+设置 `PROXY_MODE=core`，或其他非0-2值，透明代理规则将不加载，仅启动核心（适用于 sing-box/clash/mihomo 的 TUN 入站）。
 
 ### 手动模式
 
@@ -120,8 +113,8 @@
 
 ## 其他说明
 
-- 修改核心配置文件后，请确保与 `box.config` 中的端口等设置一致。
-- 模块会自动防回环（绕过本地 IP 并利用 NETFILTER_XT_MATCH_ADDRTYPE 特性），但若设备有公网 IP，仍建议手动添加[绕过规则](box/scripts/box.tproxy#L567-L585)。
+- 修改核心配置文件后，请确保与 `box.config` 和 `tproxy.conf` 中的端口等设置一致。
+- 模块会自动防回环（绕过本地 IP 并利用 NETFILTER_XT_MATCH_ADDRTYPE 特性），但若设备有公网 IP，仍建议手动添加[绕过规则](box/scripts/tproxy.conf#L55-L58)。
 - 日志位于 `/data/adb/box/run/` 目录。
 
 ## 卸载

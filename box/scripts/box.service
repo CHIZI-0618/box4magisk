@@ -5,7 +5,7 @@ export PATH="/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:$PATH:/data/dat
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 
-source ${scripts_dir}/box.config
+. ${scripts_dir}/box.config
 
 mkdir -p ${run_path}
 mkdir -p ${box_path}/${bin_name}
@@ -67,6 +67,35 @@ restore_private_dns() {
     else
         log Info "no saved private_dns_mode, skip restore."
     fi
+}
+
+oneplus_a16_fix() {
+    iptables -t filter -F fw_INPUT >> /dev/null 2>&1
+    iptables -t filter -F fw_OUTPUT >> /dev/null 2>&1
+    iptables -t filter -F fw_OUTPUT_oplus_dns >> /dev/null 2>&1
+    ip6tables -t filter -F fw_INPUT >> /dev/null 2>&1
+    ip6tables -t filter -F fw_OUTPUT >> /dev/null 2>&1
+    ip6tables -t filter -F fw_OUTPUT_oplus_dns >> /dev/null 2>&1
+    log Info "OnePlus Android 16 filter rules cleaned for TProxy fix"
+}
+
+ping_fix() {
+    case "$1" in
+        enable)
+            iptables -t nat -A OUTPUT -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            iptables -t nat -A PREROUTING -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            ip6tables -t nat -A OUTPUT -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            ip6tables -t nat -A PREROUTING -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            log Info "ICMP redirection enabled for fake IP ranges (ping returns response, not necessarily valid)"
+            ;;
+        disable)
+            iptables -t nat -D OUTPUT -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            iptables -t nat -D PREROUTING -d "$fake_ip_range_v4" -p icmp -j DNAT --to-destination 127.0.0.1
+            ip6tables -t nat -D OUTPUT -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            ip6tables -t nat -D PREROUTING -d "$fake_ip_range_v6" -p icmp -j DNAT --to-destination ::1
+            log Info "ICMP redirection disabled for fake IP ranges"
+            ;;
+    esac
 }
 
 check_permission() {
@@ -154,7 +183,7 @@ start_bin() {
             return 0
             ;;
         *)
-            log Error "$1 core error, it must be one of ${bin_name_list[*]}"
+            log Error "$1 core error, it must be one of ${bin_name_list}"
             return 2
             ;;
     esac
@@ -322,16 +351,26 @@ case "$1" in
         save_private_dns
         display_bin_status || start_service
         [ $? = "0" ] && tun_forward_enable
+        oneplus_a16_fix
+        ping_fix enable >> /dev/null 2>&1
         ;;
     stop)
         stop_service
         tun_forward_disable
         restore_private_dns
+        ping_fix disable >> /dev/null 2>&1
         ;;
     restart)
         stop_service
+        tun_forward_disable
+        restore_private_dns
+        ping_fix disable >> /dev/null 2>&1
         sleep 2
+        save_private_dns
         start_service
+        [ $? = "0" ] && tun_forward_enable
+        oneplus_a16_fix
+        ping_fix enable >> /dev/null 2>&1
         ;;
     status)
         display_bin_status
