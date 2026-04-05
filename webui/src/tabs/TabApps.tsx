@@ -2,6 +2,25 @@ import { useState, useMemo } from 'react';
 import { Search, Check } from 'lucide-react';
 import { Switch, Select } from '@/components/ui';
 
+const DEFAULT_ANDROID_ICON =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="12" fill="#E9F7EF"/>
+      <g transform="translate(2 1.5)">
+        <rect x="8" y="11" width="24" height="18" rx="6.5" fill="#3DDC84"/>
+        <rect x="10.5" y="29.5" width="5.5" height="2.5" rx="1.25" fill="#3DDC84"/>
+        <rect x="24" y="29.5" width="5.5" height="2.5" rx="1.25" fill="#3DDC84"/>
+        <rect x="6.3" y="15" width="2.7" height="11" rx="1.35" fill="#3DDC84"/>
+        <rect x="31" y="15" width="2.7" height="11" rx="1.35" fill="#3DDC84"/>
+        <rect x="14.1" y="16.2" width="2.8" height="2.8" rx="1.4" fill="#ffffff"/>
+        <rect x="23.1" y="16.2" width="2.8" height="2.8" rx="1.4" fill="#ffffff"/>
+        <path d="M13.8 10.2 11.2 6.8" stroke="#3DDC84" stroke-width="2" stroke-linecap="round"/>
+        <path d="M26.2 10.2 28.8 6.8" stroke="#3DDC84" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </svg>
+  `);
+
 export function TabApps({ config, handleToggle, handleChange, appList }: any) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('user');
@@ -97,8 +116,19 @@ export function TabApps({ config, handleToggle, handleChange, appList }: any) {
                   onClick={() => toggleApp(app.packageName)}
                   className={`flex items-center p-3 rounded-xl transition-colors ${config?.APP_PROXY_ENABLE === 1 ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer active:scale-[0.98]' : 'cursor-not-allowed'}`}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'}`}>
-                    <span className="font-bold text-sm">{app.appLabel.charAt(0)}</span>
+                  <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700/60">
+                    <img
+                      src={`ksu://icon/${app.packageName}`}
+                      alt={app.appLabel}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.src !== DEFAULT_ANDROID_ICON) {
+                          img.src = DEFAULT_ANDROID_ICON;
+                        }
+                      }}
+                    />
                   </div>
                   <div className="ml-3 flex-1 min-w-0">
                     <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate transition-colors">{app.appLabel}</div>

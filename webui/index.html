@@ -4,7 +4,36 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f8fafc" />
     <title>webui</title>
+    <script>
+      (function () {
+        var storageKey = 'box4:webui:theme';
+        var doc = document.documentElement;
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        var storedTheme = 'system';
+
+        try {
+          var value = window.localStorage.getItem(storageKey);
+          if (value === 'light' || value === 'dark' || value === 'system') {
+            storedTheme = value;
+          }
+        } catch (_) {}
+
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var isDark = storedTheme === 'dark' || (storedTheme === 'system' && prefersDark);
+
+        if (isDark) {
+          doc.classList.add('dark');
+          doc.style.backgroundColor = '#020617';
+          if (metaTheme) metaTheme.setAttribute('content', '#020617');
+        } else {
+          doc.classList.remove('dark');
+          doc.style.backgroundColor = '#f8fafc';
+          if (metaTheme) metaTheme.setAttribute('content', '#f8fafc');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -18,7 +18,7 @@ function extractJson(stdout: string, stderr: string) {
     try {
       JSON.parse(candidate);
       return candidate;
-    } catch {}
+    } catch { }
   }
   throw new Error(source || "box.webui returned no JSON payload");
 }
@@ -44,9 +44,17 @@ export const boxBridge = {
   toggle: (key: string, value: 0 | 1) => runApi(["toggle", key, String(value)]),
   setConfig: (key: string, value: string) => runApi(["set-config", key, value]),
   service: (action: "start" | "stop" | "restart" | "status") => runApi(["service", action]),
+  tproxy: (action: "start" | "stop" | "restart" | "status") => runApi(["tproxy", action]),
+  manualMode: (action: "status" | "enable" | "disable") => runApi(["manual-mode", action]),
+  checkLog: (lines: number = 80) => runApi(["check-log", String(lines)]),
   apps: () => runApi(["apps"]),
   setApps: (mode: "whitelist" | "blacklist" | "disable", value = "") => runApi(["set-apps", mode, value]),
   mihomoPanel: () => runApi(["mihomo-panel-url"]),
+  // mihomoSubscriptions: () => runApi(["mihomo-subscriptions"]),
+  // addMihomoSubscription: (name: string, url: string) => runApi(["mihomo-subscription-add", name, url]),
+  // updateMihomoSubscription: (currentName: string, nextName: string, url: string) =>
+  //   runApi(["mihomo-subscription-update", currentName, nextName, url]),
+  // removeMihomoSubscription: (name: string) => runApi(["mihomo-subscription-remove", name]),
 };
 
 export function discoverPackages() {

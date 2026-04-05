@@ -7,6 +7,7 @@ scripts_dir=$(dirname "$scripts")
 
 CONFIG_FILE="${scripts_dir}/box.config"
 SERVICE_SCRIPT="${scripts_dir}/box.service"
+TPROXY_SCRIPT="${scripts_dir}/box.tproxy"
 MODULE_ROOT="/data/adb/modules/box4"
 
 [ -n "$(magisk -v 2>/dev/null | grep lite)" ] && MODULE_ROOT="/data/adb/lite_modules/box4"
@@ -89,6 +90,74 @@ queue_service_action() {
 
     mkdir -p "$request_dir" || emit_error "failed to prepare request queue" "service"
     printf '%s\n' "$action" > "$request_file" || emit_error "failed to enqueue service action" "service"
+}
+
+chain_exists() {
+    local cmd="$1"
+    local table="$2"
+    local chain="$3"
+
+    command_exists "$cmd" || return 1
+    "$cmd" -t "$table" -L "$chain" >/dev/null 2>&1
+}
+
+manual_file_path() {
+    . "$CONFIG_FILE"
+    printf '%s/manual' "$box_path"
+}
+
+check_log_file_path() {
+    . "$CONFIG_FILE"
+    printf '%s/check.log' "$run_path"
+}
+
+manual_mode_enabled() {
+    [ -f "$(manual_file_path)" ]
+}
+
+module_disabled() {
+    [ -f "${MODULE_ROOT}/disable" ]
+}
+
+tproxy_running() {
+    . "$CONFIG_FILE"
+
+    case "$PROXY_MODE" in
+        core)
+            return 1
+            ;;
+        REDIRECT)
+            chain_exists iptables nat PROXY_PREROUTING
+            return $?
+            ;;
+        *)
+            chain_exists iptables mangle PROXY_PREROUTING
+            return $?
+            ;;
+    esac
+}
+
+check_log_summary_json() {
+    local check_log
+    check_log="$(check_log_file_path)"
+    local exists=false
+    local size=0
+    local modified=""
+    local preview=""
+
+    if [ -f "$check_log" ]; then
+        exists=true
+        size="$(wc -c < "$check_log" 2>/dev/null | tr -d ' ' )"
+        modified="$(busybox date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
+        preview="$(tail -n 20 "$check_log" 2>/dev/null)"
+    fi
+
+    printf '{"path":"%s","exists":%s,"size":%s,"modified":"%s","preview":"%s"}' \
+        "$(json_escape "$check_log")" \
+        "$exists" \
+        "${size:-0}" \
+        "$(json_escape "$modified")" \
+        "$(json_escape "$preview")"
 }
 
 require_key() {
@@ -203,14 +272,35 @@ cmd_status() {
 
     local running=false
     local pid=""
+    local manual_mode=false
+    local module_is_disabled=false
+    local autostart_enabled=true
+    local manager_control_enabled=true
+    local transparent_proxy_running=false
 
     if service_running; then
         running=true
         pid="$(busybox pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
     fi
 
+    if manual_mode_enabled; then
+        manual_mode=true
+        autostart_enabled=false
+        manager_control_enabled=false
+    fi
+
+    if module_disabled; then
+        module_is_disabled=true
+        autostart_enabled=false
+        manager_control_enabled=false
+    fi
+
+    if tproxy_running; then
+        transparent_proxy_running=true
+    fi
+
     emit_ok "status" "$(cat <<EOF
-{"running":$running,"pid":"$(json_escape "$pid")","bin_name":"$(json_escape "$bin_name")","proxy_mode":"$(json_escape "$PROXY_MODE")","app_proxy_enable":$(json_bool "$APP_PROXY_ENABLE"),"app_proxy_mode":"$(json_escape "$APP_PROXY_MODE")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")","config_file":"$(json_escape "$CONFIG_FILE")","module_root":"$(json_escape "$MODULE_ROOT")"}
+{"running":$running,"pid":"$(json_escape "$pid")","bin_name":"$(json_escape "$bin_name")","proxy_mode":"$(json_escape "$PROXY_MODE")","app_proxy_enable":$(json_bool "$APP_PROXY_ENABLE"),"app_proxy_mode":"$(json_escape "$APP_PROXY_MODE")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")","config_file":"$(json_escape "$CONFIG_FILE")","module_root":"$(json_escape "$MODULE_ROOT")","manual_mode":$manual_mode,"module_disabled":$module_is_disabled,"autostart_enabled":$autostart_enabled,"manager_control_enabled":$manager_control_enabled,"transparent_proxy_running":$transparent_proxy_running}
 EOF
 )"
 }
@@ -219,7 +309,7 @@ cmd_get_config() {
     . "$CONFIG_FILE"
 
 emit_ok "get-config" "$(cat <<EOF
-{"bin_name":"$(json_escape "$bin_name")","CORE_USER_GROUP":"$(json_escape "$CORE_USER_GROUP")","PROXY_MODE":"$(json_escape "$PROXY_MODE")","PROXY_TCP_PORT":"$(json_escape "$PROXY_TCP_PORT")","PROXY_UDP_PORT":"$(json_escape "$PROXY_UDP_PORT")","DNS_HIJACK_ENABLE":$DNS_HIJACK_ENABLE,"DNS_PORT":"$(json_escape "$DNS_PORT")","MOBILE_INTERFACE":"$(json_escape "$MOBILE_INTERFACE")","WIFI_INTERFACE":"$(json_escape "$WIFI_INTERFACE")","HOTSPOT_INTERFACE":"$(json_escape "$HOTSPOT_INTERFACE")","USB_INTERFACE":"$(json_escape "$USB_INTERFACE")","PROXY_MOBILE":$PROXY_MOBILE,"PROXY_WIFI":$PROXY_WIFI,"PROXY_HOTSPOT":$PROXY_HOTSPOT,"PROXY_USB":$PROXY_USB,"PROXY_TCP":$PROXY_TCP,"PROXY_UDP":$PROXY_UDP,"PROXY_IPV6":$PROXY_IPV6,"APP_PROXY_ENABLE":$APP_PROXY_ENABLE,"APP_PROXY_MODE":"$(json_escape "$APP_PROXY_MODE")","PROXY_APPS_LIST":"$(json_escape "$PROXY_APPS_LIST")","BYPASS_APPS_LIST":"$(json_escape "$BYPASS_APPS_LIST")","GID_PROXY_ENABLE":$GID_PROXY_ENABLE,"GID_PROXY_MODE":"$(json_escape "$GID_PROXY_MODE")","PROXY_GIDS_LIST":"$(json_escape "$PROXY_GIDS_LIST")","BYPASS_GIDS_LIST":"$(json_escape "$BYPASS_GIDS_LIST")","BYPASS_CN_IP":$BYPASS_CN_IP,"BLOCK_QUIC":$BLOCK_QUIC,"MAC_FILTER_ENABLE":$MAC_FILTER_ENABLE,"MAC_PROXY_MODE":"$(json_escape "$MAC_PROXY_MODE")","PROXY_MACS_LIST":"$(json_escape "$PROXY_MACS_LIST")","BYPASS_MACS_LIST":"$(json_escape "$BYPASS_MACS_LIST")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")"}
+{"bin_name":"$(json_escape "$bin_name")","CORE_USER_GROUP":"$(json_escape "$CORE_USER_GROUP")","PROXY_MODE":"$(json_escape "$PROXY_MODE")","PROXY_TCP_PORT":"$(json_escape "$PROXY_TCP_PORT")","PROXY_UDP_PORT":"$(json_escape "$PROXY_UDP_PORT")","DNS_HIJACK_ENABLE":$DNS_HIJACK_ENABLE,"DNS_PORT":"$(json_escape "$DNS_PORT")","MOBILE_INTERFACE":"$(json_escape "$MOBILE_INTERFACE")","WIFI_INTERFACE":"$(json_escape "$WIFI_INTERFACE")","HOTSPOT_INTERFACE":"$(json_escape "$HOTSPOT_INTERFACE")","USB_INTERFACE":"$(json_escape "$USB_INTERFACE")","PROXY_MOBILE":$PROXY_MOBILE,"PROXY_WIFI":$PROXY_WIFI,"PROXY_HOTSPOT":$PROXY_HOTSPOT,"PROXY_USB":$PROXY_USB,"PROXY_TCP":$PROXY_TCP,"PROXY_UDP":$PROXY_UDP,"PROXY_IPV6":$PROXY_IPV6,"APP_PROXY_ENABLE":$APP_PROXY_ENABLE,"APP_PROXY_MODE":"$(json_escape "$APP_PROXY_MODE")","PROXY_APPS_LIST":"$(json_escape "$PROXY_APPS_LIST")","BYPASS_APPS_LIST":"$(json_escape "$BYPASS_APPS_LIST")","GID_PROXY_ENABLE":$GID_PROXY_ENABLE,"GID_PROXY_MODE":"$(json_escape "$GID_PROXY_MODE")","PROXY_GIDS_LIST":"$(json_escape "$PROXY_GIDS_LIST")","BYPASS_GIDS_LIST":"$(json_escape "$BYPASS_GIDS_LIST")","BYPASS_CN_IP":$BYPASS_CN_IP,"BLOCK_QUIC":$BLOCK_QUIC,"MAC_FILTER_ENABLE":$MAC_FILTER_ENABLE,"MAC_PROXY_MODE":"$(json_escape "$MAC_PROXY_MODE")","PROXY_MACS_LIST":"$(json_escape "$PROXY_MACS_LIST")","BYPASS_MACS_LIST":"$(json_escape "$BYPASS_MACS_LIST")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")","use_custom_direct":"$(json_escape "$use_custom_direct")","ctr_mode":"$(json_escape "$ctr_mode")","select_outbound":"$(json_escape "$select_outbound")","default_outbound":"$(json_escape "$default_outbound")","direct_outbound":"$(json_escape "$direct_outbound")","proxy_outbound":"$(json_escape "$proxy_outbound")","direct_outbound_list":"$(json_escape "$direct_outbound_list")","default_clash_mode":"$(json_escape "$default_clash_mode")","direct_clash_mode":"$(json_escape "$direct_clash_mode")","proxy_clash_mode":"$(json_escape "$proxy_clash_mode")","direct_clash_mode_list":"$(json_escape "$direct_clash_mode_list")"}
 EOF
 )"
 }
@@ -229,7 +319,7 @@ cmd_set_config() {
     shift
     local value="$*"
 
-    [ -n "$value" ] || emit_error "missing config value" "set-config"
+    require_key "$key" "set-config"
     config_set "$key" "$value"
 
     emit_ok "set-config" "{\"key\":\"$(json_escape "$key")\",\"value\":\"$(json_escape "$(config_get_clean "$key")")\"}"
@@ -337,6 +427,76 @@ cmd_service() {
     emit_ok "service" "{\"action\":\"$(json_escape "$action")\",\"output\":\"$(json_escape "$output")\"}"
 }
 
+cmd_tproxy() {
+    local action="$1"
+
+    case "$action" in
+        start|stop|restart) ;;
+        status)
+            emit_ok "tproxy" "{\"running\":$(tproxy_running && printf true || printf false),\"mode\":\"$(json_escape "$(config_get_clean "PROXY_MODE")")\"}"
+            return 0
+            ;;
+        *)
+            emit_error "unsupported tproxy action: $action" "tproxy"
+            ;;
+    esac
+
+    local output
+    output="$("$TPROXY_SCRIPT" "$action" 2>&1)"
+    local exit_code=$?
+
+    if [ "$exit_code" -ne 0 ]; then
+        emit_error "$output" "tproxy"
+    fi
+
+    emit_ok "tproxy" "{\"action\":\"$(json_escape "$action")\",\"running\":$(tproxy_running && printf true || printf false),\"output\":\"$(json_escape "$output")\"}"
+}
+
+cmd_manual_mode() {
+    local action="${1:-status}"
+    local manual_file
+
+    manual_file="$(manual_file_path)"
+
+    case "$action" in
+        status)
+            emit_ok "manual-mode" "{\"enabled\":$(manual_mode_enabled && printf true || printf false),\"path\":\"$(json_escape "$manual_file")\"}"
+            ;;
+        enable|on|1)
+            mkdir -p "$(dirname "$manual_file")" || emit_error "failed to prepare manual mode path" "manual-mode"
+            : > "$manual_file" || emit_error "failed to enable manual mode" "manual-mode"
+            emit_ok "manual-mode" "{\"enabled\":true,\"path\":\"$(json_escape "$manual_file")\"}"
+            ;;
+        disable|off|0)
+            rm -f "$manual_file" || emit_error "failed to disable manual mode" "manual-mode"
+            emit_ok "manual-mode" "{\"enabled\":false,\"path\":\"$(json_escape "$manual_file")\"}"
+            ;;
+        *)
+            emit_error "manual-mode action must be status, enable/on/1 or disable/off/0" "manual-mode"
+            ;;
+    esac
+}
+
+cmd_check_log() {
+    local lines="${1:-80}"
+    local check_log
+
+    case "$lines" in
+        ''|*[!0-9]*)
+            emit_error "lines must be a positive integer" "check-log"
+            ;;
+    esac
+
+    check_log="$(check_log_file_path)"
+
+    if [ ! -f "$check_log" ]; then
+        emit_ok "check-log" "{\"path\":\"$(json_escape "$check_log")\",\"exists\":false,\"lines\":$lines,\"content\":\"\"}"
+        return 0
+    fi
+
+    emit_ok "check-log" "{\"path\":\"$(json_escape "$check_log")\",\"exists\":true,\"lines\":$lines,\"content\":\"$(json_escape "$(tail -n "$lines" "$check_log" 2>/dev/null)")\"}"
+}
+
 cmd_apps() {
     . "$CONFIG_FILE"
 
@@ -389,7 +549,7 @@ cmd_mihomo_panel_url() {
 }
 
 cmd_help() {
-    emit_ok "help" '["status","get-config","set-config KEY VALUE","set-number KEY VALUE","toggle KEY 0|1","service start|stop|restart|status","apps","set-apps whitelist|blacklist|disable [LIST]","mihomo-panel-url [HOST] [PORT] [SECRET] [http|https]","capabilities"]'
+    emit_ok "help" '["status","get-config","set-config KEY [VALUE]","set-number KEY VALUE","toggle KEY 0|1","service start|stop|restart|status","tproxy start|stop|restart|status","manual-mode [status|enable|disable]","check-log [LINES]","apps","set-apps whitelist|blacklist|disable [LIST]","mihomo-panel-url [HOST] [PORT] [SECRET] [http|https]","capabilities"]'
 }
 
 command="$1"
@@ -402,6 +562,9 @@ case "$command" in
     set-number) cmd_set_number "$@" ;;
     toggle) cmd_toggle "$@" ;;
     service) cmd_service "$@" ;;
+    tproxy) cmd_tproxy "$@" ;;
+    manual-mode) cmd_manual_mode "$@" ;;
+    check-log) cmd_check_log "$@" ;;
     apps) cmd_apps ;;
     set-apps) cmd_set_apps "$@" ;;
     mihomo-panel-url) cmd_mihomo_panel_url "$@" ;;

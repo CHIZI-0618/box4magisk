@@ -26,3 +26,17 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
 }
+
+html {
+  background-color: #f8fafc;
+  color-scheme: light;
+}
+
+html.dark {
+  background-color: #020617;
+  color-scheme: dark;
+}
+
+body {
+  background-color: inherit;
+}

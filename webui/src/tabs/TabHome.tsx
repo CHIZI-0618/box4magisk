@@ -12,13 +12,14 @@ const formatMemory = (memory: ClashMemory | null) => {
 
   if (candidates.length === 0) return '--';
 
-  const kb = candidates[0];
-  if (kb >= 1024 * 1024) return `${(kb / (1024 * 1024)).toFixed(2)} GB`;
-  if (kb >= 1024) return `${(kb / 1024).toFixed(1)} MB`;
-  return `${Math.round(kb)} KB`;
+  const bytes = candidates[0];
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${Math.round(bytes)} B`;
 };
 
-export function TabHome({ status, config, handleServiceAction, actionLoading, handleChange, handleToggle }: any) {
+export function TabHome({ status, config, handleServiceAction, actionLoading, handleChange, handleToggle, handleToggleAutoStart }: any) {
   const [memory, setMemory] = useState<ClashMemory | null>(null);
 
   const client = useMemo(() => {
@@ -81,14 +82,14 @@ export function TabHome({ status, config, handleServiceAction, actionLoading, ha
             onClick={() => handleServiceAction(status?.running ? 'stop' : 'start')}
             disabled={actionLoading !== null}
             className={`py-3.5 rounded-xl text-sm font-bold flex items-center justify-center transition-all shadow-md active:scale-95 disabled:opacity-80
-              ${status?.running 
-                ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20' 
+              ${status?.running
+                ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20'
                 : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200'}`}
           >
             {actionLoading === 'start' || actionLoading === 'stop' ? (
               <RefreshCw size={18} className="animate-spin" />
             ) : (
-              status?.running ? <><Square size={16} className="mr-2" /> 停止服务</> : <><Play size={16} className="mr-2" /> 启动服务</>
+              status?.running ? <><Square size={16} className="mr-2" /> 停止 Box</> : <><Play size={16} className="mr-2" /> 启动 Box</>
             )}
           </button>
           <button
@@ -99,7 +100,7 @@ export function TabHome({ status, config, handleServiceAction, actionLoading, ha
             {actionLoading === 'restart' ? (
               <RefreshCw size={16} className="animate-spin" />
             ) : (
-              <><RefreshCw size={16} className="mr-2" /> 重启</>
+              <><RefreshCw size={16} className="mr-2" /> 重启 Box</>
             )}
           </button>
         </div>
@@ -110,8 +111,8 @@ export function TabHome({ status, config, handleServiceAction, actionLoading, ha
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
           <SelectRow label="切换代理模式" value={config?.PROXY_MODE} options={['auto', 'TPROXY', 'REDIRECT', 'core']} onChange={(v: string) => handleChange('PROXY_MODE', v)} border={true} />
           <SelectRow label="切换代理核心" value={config?.bin_name} options={['sing-box', 'clash', 'mihomo', 'xray']} onChange={(v: string) => handleChange('bin_name', v)} border={true} />
-          <SwitchRow label="绕过大陆 IP" sub="直连国内流量，需要内核支持 ipset" checked={config?.BYPASS_CN_IP === 1} onChange={(v: boolean) => handleToggle('BYPASS_CN_IP', v)} border={true} />
-          <SwitchRow label="拦截 QUIC" sub="强制应用走 TCP 代理" checked={config?.BLOCK_QUIC === 1} onChange={(v: boolean) => handleToggle('BLOCK_QUIC', v)} border={false} />
+          <SwitchRow label="开机自启动" sub="设备启动时自动运行" checked={status?.autoStart === true} onChange={handleToggleAutoStart} border={true} />
+          <SwitchRow label="拦截 QUIC" sub="防止应用通过 QUIC 绕过分流规则" checked={config?.BLOCK_QUIC === 1} onChange={(v: boolean) => handleToggle('BLOCK_QUIC', v)} border={false} />
         </div>
       </div>
 

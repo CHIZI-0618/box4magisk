@@ -16,6 +16,14 @@ function readStoredTheme() {
   return value === 'light' || value === 'dark' || value === 'system' ? value : 'system';
 }
 
+function normalizeStatus(rawStatus: any) {
+  const autoStartValue = rawStatus?.autostart_enabled;
+  return {
+    ...rawStatus,
+    autoStart: autoStartValue === true || autoStartValue === 1 || autoStartValue === '1' || autoStartValue === 'true',
+  };
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
@@ -79,33 +87,45 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      try {
-        const st = await boxBridge.status();
-        const conf = await boxBridge.getConfig();
-        setStatus(st);
-        setConfig(conf);
-        setOriginalConfig(conf);
+      const [statusResult, configResult] = await Promise.allSettled([
+        boxBridge.status(),
+        boxBridge.getConfig(),
+      ]);
 
-        setTimeout(() => {
-          setAppList(discoverPackages());
-        }, 50);
-      } catch (err: any) {
-        notify("初始化失败: " + err.message);
-      } finally {
-        setLoading(false);
+      if (statusResult.status === 'fulfilled') {
+        setStatus(normalizeStatus(statusResult.value));
       }
+
+      if (configResult.status === 'fulfilled') {
+        setConfig(configResult.value);
+        setOriginalConfig(configResult.value);
+      }
+
+      setTimeout(() => {
+        setAppList(discoverPackages());
+      }, 50);
+
+      if (statusResult.status === 'rejected' && configResult.status === 'rejected') {
+        notify(`初始化失败: ${statusResult.reason?.message || configResult.reason?.message || '无法获取状态和配置'}`);
+      } else if (statusResult.status === 'rejected') {
+        notify(`状态读取失败: ${statusResult.reason?.message || '未知错误'}`);
+      } else if (configResult.status === 'rejected') {
+        notify(`配置读取失败: ${configResult.reason?.message || '未知错误'}`);
+      }
+
+      setLoading(false);
     };
     init();
   }, []);
 
   const waitForStatus = async (expectedRunning: boolean, attempts = 12, delayMs = 500) => {
-    let latestStatus = await boxBridge.status();
+    let latestStatus = normalizeStatus(await boxBridge.status());
     for (let i = 0; i < attempts; i++) {
       if (Boolean(latestStatus?.running) === expectedRunning) {
         return latestStatus;
       }
       await new Promise(resolve => setTimeout(resolve, delayMs));
-      latestStatus = await boxBridge.status();
+      latestStatus = normalizeStatus(await boxBridge.status());
     }
     return latestStatus;
   };
@@ -187,6 +207,15 @@ export default function App() {
     setActionLoading(null);
   };
 
+  const handleToggleAutoStart = async (v: boolean) => {
+    try {
+      await boxBridge.manualMode(v ? "disable" : "enable");
+      setStatus((prev: any) => ({ ...prev, autoStart: v }));
+    } catch (e: any) {
+      notify("设置失败: " + e.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className={`flex items-center justify-center min-h-screen ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
@@ -215,7 +244,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="pb-24 pt-2 overflow-y-auto h-[calc(100vh-53px)] scrollbar-hide">
-        {activeTab === 'home' && <TabHome status={status} config={config} handleServiceAction={handleServiceAction} actionLoading={actionLoading} handleChange={handleChange} handleToggle={handleToggle} />}
+        {activeTab === 'home' && <TabHome status={status} config={config} handleServiceAction={handleServiceAction} actionLoading={actionLoading} handleChange={handleChange} handleToggle={handleToggle} handleToggleAutoStart={handleToggleAutoStart} />}
         {activeTab === 'proxies' && <TabProxies status={status} />}
         {activeTab === 'apps' && <TabApps config={config} handleToggle={handleToggle} handleChange={handleChange} appList={appList} />}
         {activeTab === 'advanced' && <TabAdvanced config={config} handleToggle={handleToggle} handleChange={handleChange} />}
@@ -230,7 +259,7 @@ export default function App() {
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3.5 rounded-full shadow-[0_4px_16px_rgba(79,70,229,0.4)] flex items-center space-x-2 font-bold active:scale-95 transition-all"
           >
             {actionLoading === 'save' ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
-            <span>{actionLoading === 'save' ? '应用中...' : '保存并生效'}</span>
+            <span>{actionLoading === 'save' ? '应用中...' : '保存'}</span>
           </button>
         </div>
       )}
