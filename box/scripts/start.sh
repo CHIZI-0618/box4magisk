@@ -7,7 +7,7 @@ module_dir="/data/adb/modules/box4"
 scripts=$(realpath $0)
 scripts_dir=$(dirname ${scripts})
 
-source ${scripts_dir}/box.config
+. ${scripts_dir}/box.config
 
 wait_until_login() {
     # we doesn't have the permission to rw "/sdcard" before the user unlocks the screen
@@ -33,6 +33,6 @@ if [ ! -f ${box_path}/manual ] && [ ! -f ${module_dir}/disable ]; then
     mv ${run_path}/run.log ${run_path}/run.log.bak
 
     ${scripts_dir}/box.service start >> /dev/null 2>> ${run_path}/run.log \
-        && ${scripts_dir}/box.tproxy start >> /dev/null 2>> ${run_path}/run.log
+        && ${scripts_dir}/box.tproxy -d ${scripts_dir} start >> /dev/null 2>> ${run_path}/run.log
 
 fi
