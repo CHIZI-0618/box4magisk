@@ -57,7 +57,7 @@ export default function App() {
         {activeTab === 'home' && <TabHome status={status} config={config} handleServiceAction={handleServiceAction} actionLoading={actionLoading} handleChange={handleChange} handleToggle={handleToggle} handleToggleAutoStart={handleToggleAutoStart} />}
         {activeTab === 'proxies' && <TabProxies status={status} />}
         {activeTab === 'apps' && <TabApps config={config} handleToggle={handleToggle} handleChange={handleChange} appList={appList} />}
-        {activeTab === 'advanced' && <TabAdvanced config={config} handleToggle={handleToggle} handleChange={handleChange} />}
+        {activeTab === 'advanced' && <TabAdvanced status={status} config={config} handleToggle={handleToggle} handleChange={handleChange} />}
       </main>
 
       {/* Floating Save Button */}
