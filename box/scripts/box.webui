@@ -1,0 +1,866 @@
+#!/system/bin/sh
+
+export PATH="/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:$PATH:/data/data/com.termux/files/usr/bin"
+
+scripts=$(realpath "$0")
+scripts_dir=$(dirname "$scripts")
+
+BOX_CONFIG_FILE="${scripts_dir}/box.config"
+TPROXY_CONFIG_FILE="${scripts_dir}/tproxy.conf"
+SERVICE_SCRIPT="${scripts_dir}/box.service"
+TPROXY_SCRIPT="${scripts_dir}/box.tproxy"
+MODULE_ROOT="/data/adb/modules/box4"
+
+[ -n "$(magisk -v 2>/dev/null | grep lite)" ] && MODULE_ROOT="/data/adb/lite_modules/box4"
+
+json_escape() {
+    printf '%s' "$1" | sed \
+        -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e 's/	/\\t/g' \
+        -e 's/\r/\\r/g' \
+        -e ':a;N;$!ba;s/\n/\\n/g'
+}
+
+json_bool() {
+    case "$1" in
+        1|true|TRUE|yes|YES|on|ON) printf 'true' ;;
+        *) printf 'false' ;;
+    esac
+}
+
+validate_key_name() {
+    case "$1" in
+        ''|*[!A-Za-z0-9_]*|[0-9]*)
+            emit_error "invalid config key: $1" "${2:-unknown}"
+            ;;
+    esac
+}
+
+shell_quote_value() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+fetch_url() {
+    local url="$1"
+
+    if command_exists curl; then
+        curl -fsSL --connect-timeout 20 --retry 2 "$url"
+        return $?
+    fi
+
+    if command_exists wget; then
+        wget -qO- "$url"
+        return $?
+    fi
+
+    if command_exists busybox; then
+        busybox wget -qO- "$url"
+        return $?
+    fi
+
+    return 127
+}
+
+download_to_file() {
+    local url="$1"
+    local output="$2"
+
+    if command_exists curl; then
+        curl -fL --connect-timeout 20 --retry 2 -o "$output" "$url"
+        return $?
+    fi
+
+    if command_exists wget; then
+        wget -O "$output" "$url"
+        return $?
+    fi
+
+    if command_exists busybox; then
+        busybox wget -O "$output" "$url"
+        return $?
+    fi
+
+    return 127
+}
+
+extract_zip_file() {
+    local archive="$1"
+    local output_dir="$2"
+
+    if command_exists unzip; then
+        unzip -oq "$archive" -d "$output_dir"
+        return $?
+    fi
+
+    if command_exists busybox; then
+        busybox unzip -oq "$archive" -d "$output_dir"
+        return $?
+    fi
+
+    return 127
+}
+
+extract_gzip_to_file() {
+    local archive="$1"
+    local output_file="$2"
+
+    if command_exists gzip; then
+        gzip -dc "$archive" > "$output_file"
+        return $?
+    fi
+
+    if command_exists gunzip; then
+        gunzip -c "$archive" > "$output_file"
+        return $?
+    fi
+
+    if command_exists busybox; then
+        busybox gunzip -c "$archive" > "$output_file"
+        return $?
+    fi
+
+    return 127
+}
+
+record_download_result() {
+    local result_file="$1"
+    local core="$2"
+    local status="$3"
+    local asset="$4"
+    local message="$5"
+
+    printf '%s|%s|%s|%s\n' "$core" "$status" "$asset" "$message" >> "$result_file"
+}
+
+github_latest_asset_url() {
+    local repo="$1"
+    local pattern="$2"
+    local response url
+
+    response="$(fetch_url "https://api.github.com/repos/${repo}/releases/latest")" || return 1
+    url="$(printf '%s\n' "$response" \
+        | grep -o '"browser_download_url":[[:space:]]*"[^"]*"' \
+        | sed 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)"/\1/' \
+        | grep -E "$pattern" \
+        | head -n 1)"
+
+    [ -n "$url" ] || return 1
+    printf '%s' "$url"
+}
+
+detect_download_arch() {
+    local abi machine
+
+    abi="$(getprop ro.product.cpu.abi 2>/dev/null)"
+    machine="$(uname -m 2>/dev/null)"
+
+    case "${abi}:${machine}" in
+        arm64-v8a:*|*:aarch64|*:arm64)
+            printf 'sing-box=arm64 mihomo=arm64-v8 xray=arm64-v8a'
+            ;;
+        armeabi-v7a:*|*:armv7l|*:armv8l|*:arm)
+            printf 'sing-box=armv7 mihomo=armv7 xray=arm32-v7a'
+            ;;
+        x86_64:*|*:x86_64|*:amd64)
+            printf 'sing-box=amd64 mihomo=amd64 xray=64'
+            ;;
+        x86:*|*:i686|*:i386)
+            printf 'sing-box=386 mihomo=386 xray=32'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+install_file() {
+    local source_file="$1"
+    local target_file="$2"
+
+    mkdir -p "$(dirname "$target_file")" || return 1
+    cp "$source_file" "$target_file" || return 1
+    chmod 700 "$target_file" || return 1
+}
+
+download_sing_box_core() {
+    local tmp_dir="$1"
+    local arch="$2"
+    local output_bin="$3"
+    local url archive extract_dir source_bin
+
+    url="$(github_latest_asset_url "SagerNet/sing-box" ".*/sing-box-[^\"]*-android-${arch}\\.tar\\.gz$")" || return 1
+    archive="${tmp_dir}/sing-box.tar.gz"
+    extract_dir="${tmp_dir}/sing-box"
+
+    mkdir -p "$extract_dir" || return 1
+    download_to_file "$url" "$archive" || return 1
+    tar -xzf "$archive" -C "$extract_dir" || return 1
+    source_bin="$(find "$extract_dir" -type f -name sing-box | head -n 1)"
+    [ -n "$source_bin" ] || return 1
+    install_file "$source_bin" "$output_bin" || return 1
+    printf '%s' "$url"
+}
+
+download_mihomo_core() {
+    local tmp_dir="$1"
+    local arch="$2"
+    local output_bin="$3"
+    local url archive
+
+    url="$(github_latest_asset_url "MetaCubeX/mihomo" ".*/mihomo-android-${arch}-[^\"]*\\.gz$")" || return 1
+    archive="${tmp_dir}/mihomo.gz"
+
+    download_to_file "$url" "$archive" || return 1
+    mkdir -p "$(dirname "$output_bin")" || return 1
+    extract_gzip_to_file "$archive" "$output_bin" || return 1
+    chmod 700 "$output_bin" || return 1
+    printf '%s' "$url"
+}
+
+download_xray_core() {
+    local tmp_dir="$1"
+    local arch="$2"
+    local output_bin="$3"
+    local asset_dir="$4"
+    local url archive extract_dir source_bin
+
+    url="$(github_latest_asset_url "XTLS/Xray-core" ".*/Xray-android-${arch}\\.zip$")" || return 1
+    archive="${tmp_dir}/xray.zip"
+    extract_dir="${tmp_dir}/xray"
+
+    mkdir -p "$extract_dir" || return 1
+    download_to_file "$url" "$archive" || return 1
+    extract_zip_file "$archive" "$extract_dir" || return 1
+    source_bin="$(find "$extract_dir" -type f -name xray | head -n 1)"
+    [ -n "$source_bin" ] || return 1
+    install_file "$source_bin" "$output_bin" || return 1
+
+    mkdir -p "$asset_dir" || return 1
+    [ -f "${extract_dir}/geoip.dat" ] && cp "${extract_dir}/geoip.dat" "${asset_dir}/geoip.dat"
+    [ -f "${extract_dir}/geosite.dat" ] && cp "${extract_dir}/geosite.dat" "${asset_dir}/geosite.dat"
+    printf '%s' "$url"
+}
+
+kernel_feature_enabled() {
+    local feature="$1"
+    local config_name="CONFIG_${feature}"
+
+    if [ -f /proc/config.gz ]; then
+        zcat /proc/config.gz 2>/dev/null | grep -qE "^${config_name}=[ym]$"
+        return $?
+    fi
+
+    return 2
+}
+
+feature_json() {
+    local name="$1"
+    local available="$2"
+    local reason="$3"
+
+    printf '{"available":%s,"reason":"%s"}' \
+        "$available" \
+        "$(json_escape "$reason")"
+}
+
+emit_error() {
+    local message="${1:-unknown error}"
+    local command="${2:-unknown}"
+    printf '{"ok":false,"command":"%s","error":"%s"}\n' \
+        "$(json_escape "$command")" \
+        "$(json_escape "$message")"
+    exit 1
+}
+
+emit_ok() {
+    local command="$1"
+    local data="$2"
+    printf '{"ok":true,"command":"%s","data":%s}\n' \
+        "$(json_escape "$command")" \
+        "${data:-null}"
+}
+
+queue_service_action() {
+    local action="$1"
+    local request_dir="/data/adb/box/run/webui_service_queue"
+    local request_file="${request_dir}/$(date +%s).$$.${action}.req"
+
+    mkdir -p "$request_dir" || emit_error "failed to prepare request queue" "service"
+    printf '%s\n' "$action" > "$request_file" || emit_error "failed to enqueue service action" "service"
+}
+
+chain_exists() {
+    local cmd="$1"
+    local table="$2"
+    local chain="$3"
+
+    command_exists "$cmd" || return 1
+    "$cmd" -t "$table" -L "$chain" >/dev/null 2>&1
+}
+
+manual_file_path() {
+    source_box_config
+    printf '%s/manual' "$box_path"
+}
+
+check_log_file_path() {
+    source_box_config
+    printf '%s/check.log' "$run_path"
+}
+
+manual_mode_enabled() {
+    [ -f "$(manual_file_path)" ]
+}
+
+module_disabled() {
+    [ -f "${MODULE_ROOT}/disable" ]
+}
+
+source_box_config() {
+    [ -f "$BOX_CONFIG_FILE" ] || emit_error "box config file not found: $BOX_CONFIG_FILE" "config-read"
+    . "$BOX_CONFIG_FILE"
+}
+
+source_tproxy_config() {
+    [ -f "$TPROXY_CONFIG_FILE" ] || emit_error "tproxy config file not found: $TPROXY_CONFIG_FILE" "config-read"
+    . "$TPROXY_CONFIG_FILE"
+}
+
+source_all_configs() {
+    source_box_config
+    source_tproxy_config
+}
+
+config_file_for_key() {
+    local key="$1"
+
+    if grep -q "^$key=" "$TPROXY_CONFIG_FILE" 2>/dev/null; then
+        printf '%s' "$TPROXY_CONFIG_FILE"
+        return 0
+    fi
+
+    if grep -q "^$key=" "$BOX_CONFIG_FILE" 2>/dev/null; then
+        printf '%s' "$BOX_CONFIG_FILE"
+        return 0
+    fi
+
+    return 1
+}
+
+tproxy_running() {
+    source_tproxy_config
+
+    case "$PROXY_MODE" in
+        2)
+            chain_exists iptables nat PROXY_PREROUTING
+            return $?
+            ;;
+        *)
+            chain_exists iptables mangle PROXY_PREROUTING
+            return $?
+            ;;
+    esac
+}
+
+check_log_summary_json() {
+    local check_log
+    check_log="$(check_log_file_path)"
+    local exists=false
+    local size=0
+    local modified=""
+    local preview=""
+
+    if [ -f "$check_log" ]; then
+        exists=true
+        size="$(wc -c < "$check_log" 2>/dev/null | tr -d ' ' )"
+        modified="$(busybox date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
+        preview="$(tail -n 20 "$check_log" 2>/dev/null)"
+    fi
+
+    printf '{"path":"%s","exists":%s,"size":%s,"modified":"%s","preview":"%s"}' \
+        "$(json_escape "$check_log")" \
+        "$exists" \
+        "${size:-0}" \
+        "$(json_escape "$modified")" \
+        "$(json_escape "$preview")"
+}
+
+require_key() {
+    [ -n "$1" ] || emit_error "missing config key" "$2"
+    validate_key_name "$1" "$2"
+}
+
+config_has_key() {
+    local target_file
+    target_file="$(config_file_for_key "$1")" || return 1
+    grep -q "^$1=" "$target_file"
+}
+
+config_get_raw() {
+    local target_file
+    target_file="$(config_file_for_key "$1")" || return 1
+    sed -n "s/^$1=//p" "$target_file" | head -n 1
+}
+
+config_get_clean() {
+    local value
+    value="$(config_get_raw "$1")"
+    case "$value" in
+        \"*\")
+            value="${value#\"}"
+            value="${value%\"}"
+            ;;
+        \'*\')
+            value="${value#\'}"
+            value="${value%\'}"
+            ;;
+    esac
+    printf '%s' "$value"
+}
+
+replace_config_line() {
+    local target_file="$1"
+    local key="$2"
+    local replacement="$3"
+    local tmp_file="${target_file}.tmp.$$"
+
+    awk -v key="$key" -v replacement="$replacement" '
+        index($0, key "=") == 1 {
+            print replacement
+            next
+        }
+        { print }
+    ' "$target_file" > "$tmp_file" || emit_error "failed to update config" "config-write"
+
+    mv "$tmp_file" "$target_file" || emit_error "failed to replace config" "config-write"
+}
+
+config_set() {
+    local key="$1"
+    local value="$2"
+    local shell_quoted
+    local target_file
+
+    require_key "$key" "set-config"
+    target_file="$(config_file_for_key "$key")" || emit_error "unknown config key: $key" "set-config"
+
+    shell_quoted="$(shell_quote_value "$value")"
+    replace_config_line "$target_file" "$key" "${key}=${shell_quoted}"
+}
+
+config_set_numeric() {
+    local key="$1"
+    local value="$2"
+    local target_file
+
+    require_key "$key" "set-number"
+    target_file="$(config_file_for_key "$key")" || emit_error "unknown config key: $key" "set-number"
+    case "$value" in
+        ''|*[!0-9-]*)
+            emit_error "numeric value required for $key" "set-number"
+            ;;
+    esac
+    replace_config_line "$target_file" "$key" "${key}=${value}"
+}
+
+validate_toggle_request() {
+    local key="$1"
+    local value="$2"
+
+    [ "$value" = "1" ] || return 0
+
+    case "$key" in
+        BYPASS_CN_IP)
+            if ! command_exists ipset; then
+                emit_error "ipset command not found, cannot enable BYPASS_CN_IP" "toggle"
+            fi
+            if ! kernel_feature_enabled "IP_SET"; then
+                emit_error "kernel does not support CONFIG_IP_SET, cannot enable BYPASS_CN_IP" "toggle"
+            fi
+            if ! kernel_feature_enabled "NETFILTER_XT_SET"; then
+                emit_error "kernel does not support CONFIG_NETFILTER_XT_SET, cannot enable BYPASS_CN_IP" "toggle"
+            fi
+            ;;
+        PROXY_IPV6)
+            if [ "$(config_get_clean "PROXY_MODE")" = "2" ]; then
+                if ! kernel_feature_enabled "IP6_NF_NAT"; then
+                    emit_error "kernel does not support CONFIG_IP6_NF_NAT, cannot enable PROXY_IPV6 in REDIRECT mode" "toggle"
+                fi
+                if ! kernel_feature_enabled "IP6_NF_TARGET_REDIRECT"; then
+                    emit_error "kernel does not support CONFIG_IP6_NF_TARGET_REDIRECT, cannot enable PROXY_IPV6 in REDIRECT mode" "toggle"
+                fi
+            fi
+            ;;
+    esac
+}
+
+service_running() {
+    source_box_config
+    busybox pidof "$bin_name" >/dev/null 2>&1
+}
+
+cmd_status() {
+    source_all_configs
+
+    local running=false
+    local pid=""
+    local manual_mode=false
+    local module_is_disabled=false
+    local autostart_enabled=true
+    local manager_control_enabled=true
+    local transparent_proxy_running=false
+
+    if service_running; then
+        running=true
+        pid="$(busybox pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
+    fi
+
+    if manual_mode_enabled; then
+        manual_mode=true
+        autostart_enabled=false
+        manager_control_enabled=false
+    fi
+
+    if module_disabled; then
+        module_is_disabled=true
+        autostart_enabled=false
+        manager_control_enabled=false
+    fi
+
+    if tproxy_running; then
+        transparent_proxy_running=true
+    fi
+
+    emit_ok "status" "$(cat <<EOF
+{"running":$running,"pid":"$(json_escape "$pid")","bin_name":"$(json_escape "$bin_name")","proxy_mode":$PROXY_MODE,"app_proxy_enable":$(json_bool "$APP_PROXY_ENABLE"),"app_proxy_mode":"$(json_escape "$APP_PROXY_MODE")","clash_api_port":"$(json_escape "$clash_api_port")","clash_api_secret":"$(json_escape "$clash_api_secret")","box_config_file":"$(json_escape "$BOX_CONFIG_FILE")","tproxy_config_file":"$(json_escape "$TPROXY_CONFIG_FILE")","module_root":"$(json_escape "$MODULE_ROOT")","manual_mode":$manual_mode,"module_disabled":$module_is_disabled,"autostart_enabled":$autostart_enabled,"manager_control_enabled":$manager_control_enabled,"transparent_proxy_running":$transparent_proxy_running}
+EOF
+)"
+}
+
+cmd_get_config() {
+    source_all_configs
+
+emit_ok "get-config" "$(cat <<EOF
+{"bin_name":"$(json_escape "$bin_name")","CORE_USER_GROUP":"$(json_escape "$CORE_USER_GROUP")","ROUTING_MARK":"$(json_escape "$ROUTING_MARK")","FORCE_MARK_BYPASS":$FORCE_MARK_BYPASS,"PROXY_MODE":$PROXY_MODE,"PERFORMANCE_MODE":$PERFORMANCE_MODE,"PROXY_TCP_PORT":"$(json_escape "$PROXY_TCP_PORT")","PROXY_UDP_PORT":"$(json_escape "$PROXY_UDP_PORT")","DNS_HIJACK_ENABLE":$DNS_HIJACK_ENABLE,"DNS_PORT":"$(json_escape "$DNS_PORT")","MOBILE_INTERFACE":"$(json_escape "$MOBILE_INTERFACE")","WIFI_INTERFACE":"$(json_escape "$WIFI_INTERFACE")","HOTSPOT_INTERFACE":"$(json_escape "$HOTSPOT_INTERFACE")","USB_INTERFACE":"$(json_escape "$USB_INTERFACE")","OTHER_BYPASS_INTERFACES":"$(json_escape "$OTHER_BYPASS_INTERFACES")","OTHER_PROXY_INTERFACES":"$(json_escape "$OTHER_PROXY_INTERFACES")","PROXY_MOBILE":$PROXY_MOBILE,"PROXY_WIFI":$PROXY_WIFI,"PROXY_HOTSPOT":$PROXY_HOTSPOT,"PROXY_USB":$PROXY_USB,"PROXY_TCP":$PROXY_TCP,"PROXY_UDP":$PROXY_UDP,"PROXY_IPV6":$PROXY_IPV6,"BYPASS_IPv4_LIST":"$(json_escape "$BYPASS_IPv4_LIST")","BYPASS_IPv6_LIST":"$(json_escape "$BYPASS_IPv6_LIST")","PROXY_IPv4_LIST":"$(json_escape "$PROXY_IPv4_LIST")","PROXY_IPv6_LIST":"$(json_escape "$PROXY_IPv6_LIST")","HOTSPOT_SUBNET_IPV4":"$(json_escape "$HOTSPOT_SUBNET_IPV4")","HOTSPOT_SUBNET_IPV6":"$(json_escape "$HOTSPOT_SUBNET_IPV6")","MARK_VALUE":$MARK_VALUE,"MARK_VALUE6":$MARK_VALUE6,"TABLE_ID":$TABLE_ID,"APP_PROXY_ENABLE":$APP_PROXY_ENABLE,"APP_PROXY_MODE":"$(json_escape "$APP_PROXY_MODE")","PROXY_APPS_LIST":"$(json_escape "$PROXY_APPS_LIST")","BYPASS_APPS_LIST":"$(json_escape "$BYPASS_APPS_LIST")","BYPASS_CN_IP":$BYPASS_CN_IP,"CN_IP_FILE":"$(json_escape "$CN_IP_FILE")","CN_IPV6_FILE":"$(json_escape "$CN_IPV6_FILE")","CN_IP_URL":"$(json_escape "$CN_IP_URL")","CN_IPV6_URL":"$(json_escape "$CN_IPV6_URL")","BLOCK_QUIC":$BLOCK_QUIC,"MAC_FILTER_ENABLE":$MAC_FILTER_ENABLE,"MAC_PROXY_MODE":"$(json_escape "$MAC_PROXY_MODE")","PROXY_MACS_LIST":"$(json_escape "$PROXY_MACS_LIST")","BYPASS_MACS_LIST":"$(json_escape "$BYPASS_MACS_LIST")","box_user_group":"$(json_escape "$box_user_group")","clash_api_port":$clash_api_port,"clash_api_secret":"$(json_escape "$clash_api_secret")","use_custom_direct":"$(json_escape "$use_custom_direct")","ctr_mode":"$(json_escape "$ctr_mode")","select_outbound":"$(json_escape "$select_outbound")","default_outbound":"$(json_escape "$default_outbound")","direct_outbound":"$(json_escape "$direct_outbound")","proxy_outbound":"$(json_escape "$proxy_outbound")","direct_outbound_list":"$(json_escape "$direct_outbound_list")","default_clash_mode":"$(json_escape "$default_clash_mode")","direct_clash_mode":"$(json_escape "$direct_clash_mode")","proxy_clash_mode":"$(json_escape "$proxy_clash_mode")","direct_clash_mode_list":"$(json_escape "$direct_clash_mode_list")"}
+EOF
+)"
+}
+
+cmd_set_config() {
+    local key="$1"
+    shift
+    local value="$*"
+
+    require_key "$key" "set-config"
+    config_set "$key" "$value"
+
+    emit_ok "set-config" "{\"key\":\"$(json_escape "$key")\",\"value\":\"$(json_escape "$(config_get_clean "$key")")\"}"
+}
+
+cmd_toggle() {
+    local key="$1"
+    local value="$2"
+
+    case "$value" in
+        0|1) ;;
+        *) emit_error "toggle value must be 0 or 1" "toggle" ;;
+    esac
+
+    validate_toggle_request "$key" "$value"
+    config_set_numeric "$key" "$value"
+    emit_ok "toggle" "{\"key\":\"$(json_escape "$key")\",\"value\":$value}"
+}
+
+cmd_set_number() {
+    local key="$1"
+    local value="$2"
+
+    [ -n "$value" ] || emit_error "missing numeric value" "set-number"
+    config_set_numeric "$key" "$value"
+    emit_ok "set-number" "{\"key\":\"$(json_escape "$key")\",\"value\":$value}"
+}
+
+cmd_capabilities() {
+    local ipset_cmd=true
+    local config_gz=true
+    local tproxy=true
+    local ipset_kernel=true
+    local xt_set=true
+    local ip6_nat=true
+    local ip6_redirect=true
+    local tproxy_reason="ok"
+    local cn_ip_reason="ok"
+    local ipv6_redirect_reason="ok"
+
+    if ! command_exists ipset; then
+        ipset_cmd=false
+    fi
+
+    if [ ! -f /proc/config.gz ]; then
+        config_gz=false
+        tproxy=false
+        ipset_kernel=false
+        xt_set=false
+        ip6_nat=false
+        ip6_redirect=false
+        tproxy_reason="/proc/config.gz not available"
+        cn_ip_reason="/proc/config.gz not available"
+        ipv6_redirect_reason="/proc/config.gz not available"
+    else
+        kernel_feature_enabled "NETFILTER_XT_TARGET_TPROXY" || {
+            tproxy=false
+            tproxy_reason="CONFIG_NETFILTER_XT_TARGET_TPROXY missing"
+        }
+        kernel_feature_enabled "IP_SET" || ipset_kernel=false
+        kernel_feature_enabled "NETFILTER_XT_SET" || xt_set=false
+        kernel_feature_enabled "IP6_NF_NAT" || ip6_nat=false
+        kernel_feature_enabled "IP6_NF_TARGET_REDIRECT" || ip6_redirect=false
+
+        if [ "$ipset_kernel" != true ] || [ "$xt_set" != true ]; then
+            cn_ip_reason="CONFIG_IP_SET or CONFIG_NETFILTER_XT_SET missing"
+        fi
+        if [ "$ip6_nat" != true ] || [ "$ip6_redirect" != true ]; then
+            ipv6_redirect_reason="CONFIG_IP6_NF_NAT or CONFIG_IP6_NF_TARGET_REDIRECT missing"
+        fi
+    fi
+
+    if [ "$ipset_cmd" != true ] && [ "$cn_ip_reason" = "ok" ]; then
+        cn_ip_reason="ipset command not found"
+    fi
+
+    emit_ok "capabilities" "$(cat <<EOF
+{"commands":{"ipset":$ipset_cmd},"kernel":{"config_gz":$config_gz,"tproxy":$tproxy,"ip_set":$ipset_kernel,"xt_set":$xt_set,"ip6_nf_nat":$ip6_nat,"ip6_nf_target_redirect":$ip6_redirect},"features":{"BYPASS_CN_IP":$(feature_json "BYPASS_CN_IP" "$( [ "$ipset_cmd" = true ] && [ "$ipset_kernel" = true ] && [ "$xt_set" = true ] && printf true || printf false )" "$cn_ip_reason"),"TPROXY":$(feature_json "TPROXY" "$tproxy" "$tproxy_reason"),"IPV6_REDIRECT":$(feature_json "IPV6_REDIRECT" "$( [ "$ip6_nat" = true ] && [ "$ip6_redirect" = true ] && printf true || printf false )" "$ipv6_redirect_reason")}}
+EOF
+)"
+}
+
+cmd_service() {
+    local action="$1"
+
+    case "$action" in
+        start|stop|restart|status) ;;
+        *) emit_error "unsupported service action: $action" "service" ;;
+    esac
+
+    if [ "$action" = "start" ] || [ "$action" = "restart" ]; then
+        queue_service_action "$action"
+        emit_ok "service" "{\"action\":\"$(json_escape "$action")\",\"async\":true,\"output\":\"scheduled\"}"
+        return 0
+    fi
+
+    local output
+    output="$("$SERVICE_SCRIPT" "$action" 2>&1)"
+    local exit_code=$?
+
+    if [ "$exit_code" -ne 0 ]; then
+        emit_error "$output" "service"
+    fi
+
+    emit_ok "service" "{\"action\":\"$(json_escape "$action")\",\"output\":\"$(json_escape "$output")\"}"
+}
+
+cmd_tproxy() {
+    local action="$1"
+
+    case "$action" in
+        start|stop|restart) ;;
+        status)
+            emit_ok "tproxy" "{\"running\":$(tproxy_running && printf true || printf false),\"mode\":$(config_get_clean "PROXY_MODE")}"
+            return 0
+            ;;
+        *)
+            emit_error "unsupported tproxy action: $action" "tproxy"
+            ;;
+    esac
+
+    local output
+    output="$("$TPROXY_SCRIPT" "$action" 2>&1)"
+    local exit_code=$?
+
+    if [ "$exit_code" -ne 0 ]; then
+        emit_error "$output" "tproxy"
+    fi
+
+    emit_ok "tproxy" "{\"action\":\"$(json_escape "$action")\",\"running\":$(tproxy_running && printf true || printf false),\"output\":\"$(json_escape "$output")\"}"
+}
+
+cmd_manual_mode() {
+    local action="${1:-status}"
+    local manual_file
+
+    manual_file="$(manual_file_path)"
+
+    case "$action" in
+        status)
+            emit_ok "manual-mode" "{\"enabled\":$(manual_mode_enabled && printf true || printf false),\"path\":\"$(json_escape "$manual_file")\"}"
+            ;;
+        enable|on|1)
+            mkdir -p "$(dirname "$manual_file")" || emit_error "failed to prepare manual mode path" "manual-mode"
+            : > "$manual_file" || emit_error "failed to enable manual mode" "manual-mode"
+            emit_ok "manual-mode" "{\"enabled\":true,\"path\":\"$(json_escape "$manual_file")\"}"
+            ;;
+        disable|off|0)
+            rm -f "$manual_file" || emit_error "failed to disable manual mode" "manual-mode"
+            emit_ok "manual-mode" "{\"enabled\":false,\"path\":\"$(json_escape "$manual_file")\"}"
+            ;;
+        *)
+            emit_error "manual-mode action must be status, enable/on/1 or disable/off/0" "manual-mode"
+            ;;
+    esac
+}
+
+cmd_check_log() {
+    local lines="${1:-80}"
+    local check_log
+
+    case "$lines" in
+        ''|*[!0-9]*)
+            emit_error "lines must be a positive integer" "check-log"
+            ;;
+    esac
+
+    check_log="$(check_log_file_path)"
+
+    if [ ! -f "$check_log" ]; then
+        emit_ok "check-log" "{\"path\":\"$(json_escape "$check_log")\",\"exists\":false,\"lines\":$lines,\"content\":\"\"}"
+        return 0
+    fi
+
+    emit_ok "check-log" "{\"path\":\"$(json_escape "$check_log")\",\"exists\":true,\"lines\":$lines,\"content\":\"$(json_escape "$(tail -n "$lines" "$check_log" 2>/dev/null)")\"}"
+}
+
+cmd_apps() {
+    source_tproxy_config
+
+    local proxy_list bypass_list
+    proxy_list="$(json_escape "$PROXY_APPS_LIST")"
+    bypass_list="$(json_escape "$BYPASS_APPS_LIST")"
+
+    emit_ok "apps" "{\"enabled\":$(json_bool "$APP_PROXY_ENABLE"),\"mode\":\"$(json_escape "$APP_PROXY_MODE")\",\"proxy_apps\":\"$proxy_list\",\"bypass_apps\":\"$bypass_list\"}"
+}
+
+cmd_set_apps() {
+    local mode="$1"
+    shift
+    local value="$*"
+
+    case "$mode" in
+        whitelist)
+            config_set "APP_PROXY_MODE" "whitelist"
+            config_set_numeric "APP_PROXY_ENABLE" 1
+            config_set "PROXY_APPS_LIST" "$value"
+            ;;
+        blacklist)
+            config_set "APP_PROXY_MODE" "blacklist"
+            config_set_numeric "APP_PROXY_ENABLE" 1
+            config_set "BYPASS_APPS_LIST" "$value"
+            ;;
+        disable)
+            config_set_numeric "APP_PROXY_ENABLE" 0
+            ;;
+        *)
+            emit_error "apps mode must be whitelist, blacklist or disable" "set-apps"
+            ;;
+    esac
+
+    cmd_apps
+}
+
+cmd_mihomo_panel_url() {
+    source_box_config
+
+    local host port secret scheme external_controller panel_url
+    host="${1:-127.0.0.1}"
+    port="${2:-$clash_api_port}"
+    secret="${3:-$clash_api_secret}"
+    scheme="${4:-http}"
+    external_controller="${scheme}://${host}:${port}"
+    panel_url="https://yacd.metacubex.one/#/setup?hostname=$(json_escape "$host")&port=$(json_escape "$port")&secret=$(json_escape "$secret")&https=$( [ "$scheme" = "https" ] && printf true || printf false )"
+
+    emit_ok "mihomo-panel-url" "{\"host\":\"$(json_escape "$host")\",\"port\":\"$(json_escape "$port")\",\"secret\":\"$(json_escape "$secret")\",\"external_controller\":\"$(json_escape "$external_controller")\",\"panel_url\":\"$panel_url\"}"
+}
+
+cmd_download_cores() {
+    source_box_config
+
+    local arch_map sing_box_arch mihomo_arch xray_arch tmp_dir result_file
+    local ok_count=0 fail_count=0 json_results="" line core status asset message
+
+    arch_map="$(detect_download_arch)" || emit_error "unsupported architecture: $(getprop ro.product.cpu.abi 2>/dev/null || uname -m 2>/dev/null)" "download-cores"
+    sing_box_arch="$(printf '%s\n' "$arch_map" | sed -n 's/.*sing-box=\([^ ]*\).*/\1/p')"
+    mihomo_arch="$(printf '%s\n' "$arch_map" | sed -n 's/.*mihomo=\([^ ]*\).*/\1/p')"
+    xray_arch="$(printf '%s\n' "$arch_map" | sed -n 's/.*xray=\([^ ]*\).*/\1/p')"
+
+    tmp_dir="$(mktemp -d /data/local/tmp/box4-download.XXXXXX 2>/dev/null || mktemp -d /tmp/box4-download.XXXXXX 2>/dev/null)" \
+        || emit_error "failed to create temporary directory" "download-cores"
+    result_file="${tmp_dir}/results.txt"
+    : > "$result_file"
+    trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+
+    if asset="$(download_sing_box_core "$tmp_dir" "$sing_box_arch" "${box_path}/bin/sing-box" 2>/dev/null)"; then
+        record_download_result "$result_file" "sing-box" "ok" "$asset" "installed"
+        ok_count=$((ok_count + 1))
+    else
+        record_download_result "$result_file" "sing-box" "error" "" "download failed"
+        fail_count=$((fail_count + 1))
+    fi
+
+    if asset="$(download_mihomo_core "$tmp_dir" "$mihomo_arch" "${box_path}/bin/mihomo" 2>/dev/null)"; then
+        record_download_result "$result_file" "mihomo" "ok" "$asset" "installed"
+        ok_count=$((ok_count + 1))
+    else
+        record_download_result "$result_file" "mihomo" "error" "" "download failed"
+        fail_count=$((fail_count + 1))
+    fi
+
+    if asset="$(download_xray_core "$tmp_dir" "$xray_arch" "${box_path}/bin/xray" "${box_path}/xray" 2>/dev/null)"; then
+        record_download_result "$result_file" "xray" "ok" "$asset" "installed"
+        ok_count=$((ok_count + 1))
+    else
+        record_download_result "$result_file" "xray" "error" "" "download failed"
+        fail_count=$((fail_count + 1))
+    fi
+
+    while IFS='|' read -r core status asset message; do
+        [ -n "$core" ] || continue
+        [ -n "$json_results" ] && json_results="${json_results},"
+        json_results="${json_results}\"$(json_escape "$core")\":{\"status\":\"$(json_escape "$status")\",\"asset\":\"$(json_escape "$asset")\",\"message\":\"$(json_escape "$message")\"}"
+    done < "$result_file"
+
+    if [ "$ok_count" -eq 0 ]; then
+        emit_error "failed to download main cores" "download-cores"
+    fi
+
+    emit_ok "download-cores" "{\"arch\":{\"sing-box\":\"$(json_escape "$sing_box_arch")\",\"mihomo\":\"$(json_escape "$mihomo_arch")\",\"xray\":\"$(json_escape "$xray_arch")\"},\"installed\":$ok_count,\"failed\":$fail_count,\"results\":{${json_results}}}"
+}
+
+cmd_help() {
+    emit_ok "help" '["status","get-config","set-config KEY [VALUE]","set-number KEY VALUE","toggle KEY 0|1","service start|stop|restart|status","tproxy start|stop|restart|status","manual-mode [status|enable|disable]","check-log [LINES]","apps","set-apps whitelist|blacklist|disable [LIST]","mihomo-panel-url [HOST] [PORT] [SECRET] [http|https]","download-cores","capabilities"]'
+}
+
+command="$1"
+shift 2>/dev/null || true
+
+case "$command" in
+    status) cmd_status ;;
+    get-config) cmd_get_config ;;
+    set-config) cmd_set_config "$@" ;;
+    set-number) cmd_set_number "$@" ;;
+    toggle) cmd_toggle "$@" ;;
+    service) cmd_service "$@" ;;
+    tproxy) cmd_tproxy "$@" ;;
+    manual-mode) cmd_manual_mode "$@" ;;
+    check-log) cmd_check_log "$@" ;;
+    apps) cmd_apps ;;
+    set-apps) cmd_set_apps "$@" ;;
+    mihomo-panel-url) cmd_mihomo_panel_url "$@" ;;
+    download-cores) cmd_download_cores "$@" ;;
+    capabilities) cmd_capabilities ;;
+    help|"") cmd_help ;;
+    *) emit_error "unsupported command: $command" "$command" ;;
+esac
