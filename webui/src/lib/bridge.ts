@@ -1,4 +1,5 @@
 import { exec, getPackagesInfo, listPackages, toast } from "kernelsu";
+import type { AppInfo } from '@/types/box';
 
 const BRIDGE_RELATIVE_PATH = "/data/adb/box/scripts/box.webui";
 
@@ -57,18 +58,18 @@ export const boxBridge = {
   // removeMihomoSubscription: (name: string) => runApi(["mihomo-subscription-remove", name]),
 };
 
-export function discoverPackages() {
+export function discoverPackages(): AppInfo[] {
   try {
     const pkgs = listPackages?.("all");
     if (!Array.isArray(pkgs)) return [];
     const validPkgs = pkgs.filter(v => typeof v === 'string' && v.trim().length > 0);
-    const rows = getPackagesInfo?.(validPkgs) as any[];
+    const rows = getPackagesInfo?.(validPkgs) as Array<Partial<AppInfo> & { packageName?: string }>;
     if (!Array.isArray(rows)) return [];
 
-    return rows.filter(entry => typeof entry === 'object' && entry !== null && typeof entry.packageName === 'string')
+    return rows.filter((entry): entry is Partial<AppInfo> & { packageName: string } => typeof entry === 'object' && entry !== null && typeof entry.packageName === 'string')
       .map(entry => ({
         packageName: entry.packageName,
-        appLabel: entry.appLabel?.trim() || entry.packageName,
+        appLabel: (entry.appLabel?.trim() || entry.packageName),
         isSystem: Boolean(entry.isSystem),
       }))
       .sort((a, b) => {

@@ -1,231 +1,41 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { RefreshCw, Save, Home, Layers, Settings, Smartphone, Moon, Sun, Server } from 'lucide-react';
-import { boxBridge, discoverPackages, notify } from '@/lib/bridge';
 import { NavItem } from '@/components/ui';
+import { useBoxController } from '@/hooks/useBoxController';
+import { useTheme } from '@/hooks/useTheme';
 import { TabHome } from '@/tabs/TabHome';
 import { TabProxies } from '@/tabs/TabProxies';
 import { TabApps } from '@/tabs/TabApps';
 import { TabAdvanced } from '@/tabs/TabAdvanced';
 import '@/index.css';
 
-const THEME_STORAGE_KEY = 'box4:webui:theme';
-
-function readStoredTheme() {
-  if (typeof window === 'undefined') return 'system';
-  const value = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system';
-}
-
-function normalizeStatus(rawStatus: any) {
-  const autoStartValue = rawStatus?.autostart_enabled;
-  return {
-    ...rawStatus,
-    autoStart: autoStartValue === true || autoStartValue === 1 || autoStartValue === '1' || autoStartValue === 'true',
-  };
-}
-
 export default function App() {
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
-  const [status, setStatus] = useState<any>({ running: false, pid: '', bin_name: 'sing-box', clash_api_port: '9090' });
-  const [originalConfig, setOriginalConfig] = useState<any>({});
-  const [config, setConfig] = useState<any>({});
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [appList, setAppList] = useState<any[]>([]);
-
-  // 主题状态：system | light | dark
-  const [theme, setTheme] = useState(readStoredTheme);
-  const [systemIsDark, setSystemIsDark] = useState(false);
-
-  // 监听系统级暗色模式变化
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    setSystemIsDark(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setSystemIsDark(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  const isDark = theme === 'system' ? systemIsDark : theme === 'dark';
-
-  const cycleTheme = () => {
-    if (theme === 'system') setTheme('light');
-    else if (theme === 'light') setTheme('dark');
-    else setTheme('system');
-  };
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
-
-  const hasChanges = useMemo(() => {
-    return JSON.stringify(originalConfig) !== JSON.stringify(config);
-  }, [originalConfig, config]);
-
-  const toggleKeys = useMemo(() => new Set([
-    'PROXY_MOBILE',
-    'PROXY_WIFI',
-    'PROXY_HOTSPOT',
-    'PROXY_USB',
-    'PROXY_TCP',
-    'PROXY_UDP',
-    'PROXY_IPV6',
-    'APP_PROXY_ENABLE',
-    'BYPASS_CN_IP',
-    'BLOCK_QUIC',
-    'MAC_FILTER_ENABLE',
-  ]), []);
-
-  const numericKeys = useMemo(() => new Set([
-    'DNS_HIJACK_ENABLE',
-    'PROXY_TCP_PORT',
-    'PROXY_UDP_PORT',
-    'DNS_PORT',
-    'clash_api_port',
-  ]), []);
-
-  useEffect(() => {
-    const init = async () => {
-      const [statusResult, configResult] = await Promise.allSettled([
-        boxBridge.status(),
-        boxBridge.getConfig(),
-      ]);
-
-      if (statusResult.status === 'fulfilled') {
-        setStatus(normalizeStatus(statusResult.value));
-      }
-
-      if (configResult.status === 'fulfilled') {
-        setConfig(configResult.value);
-        setOriginalConfig(configResult.value);
-      }
-
-      setTimeout(() => {
-        setAppList(discoverPackages());
-      }, 50);
-
-      if (statusResult.status === 'rejected' && configResult.status === 'rejected') {
-        notify(`初始化失败: ${statusResult.reason?.message || configResult.reason?.message || '无法获取状态和配置'}`);
-      } else if (statusResult.status === 'rejected') {
-        notify(`状态读取失败: ${statusResult.reason?.message || '未知错误'}`);
-      } else if (configResult.status === 'rejected') {
-        notify(`配置读取失败: ${configResult.reason?.message || '未知错误'}`);
-      }
-
-      setLoading(false);
-    };
-    init();
-  }, []);
-
-  const waitForStatus = async (expectedRunning: boolean, attempts = 12, delayMs = 500) => {
-    let latestStatus = normalizeStatus(await boxBridge.status());
-    for (let i = 0; i < attempts; i++) {
-      if (Boolean(latestStatus?.running) === expectedRunning) {
-        return latestStatus;
-      }
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      latestStatus = normalizeStatus(await boxBridge.status());
-    }
-    return latestStatus;
-  };
-
-  const handleServiceAction = async (action: string) => {
-    setActionLoading(action);
-    // 给浏览器一点时间渲染 loading 状态，避免桥接调用阻塞 UI
-    await new Promise(resolve => setTimeout(resolve, 50));
-    try {
-      if (action === 'start' || action === 'stop' || action === 'restart') {
-        await boxBridge.service(action as any);
-      }
-      const st = action === 'start'
-        ? await waitForStatus(true)
-        : action === 'restart'
-          ? await waitForStatus(true)
-          : action === 'stop'
-            ? await waitForStatus(false)
-            : await boxBridge.status();
-      setStatus(st);
-      notify(action === 'stop' ? "服务已停止" : "服务已启动");
-    } catch (e: any) {
-      notify("操作失败: " + e.message);
-    }
-    setActionLoading(null);
-  };
-
-  const handleToggle = (key: string, val: boolean) => {
-    setConfig((prev: any) => ({ ...prev, [key]: val ? 1 : 0 }));
-  };
-
-  const handleChange = (key: string, val: any) => {
-    setConfig((prev: any) => ({ ...prev, [key]: val }));
-  };
-
-  const handleSaveAndApply = async () => {
-    setActionLoading('save');
-    try {
-      let isAppsChanged = false;
-      const keysChanged = [];
-      const newConfig = { ...config };
-
-      for (const key of Object.keys(newConfig)) {
-        if (newConfig[key] !== originalConfig[key]) {
-          if (['APP_PROXY_ENABLE', 'APP_PROXY_MODE', 'PROXY_APPS_LIST', 'BYPASS_APPS_LIST'].includes(key)) {
-            isAppsChanged = true;
-          } else {
-            keysChanged.push(key);
-          }
-        }
-      }
-
-      for (const key of keysChanged) {
-        if (toggleKeys.has(key)) {
-          await boxBridge.toggle(key, newConfig[key] as 0 | 1);
-        } else if (numericKeys.has(key)) {
-          await boxBridge.setNumber(key, newConfig[key]);
-        } else {
-          await boxBridge.setConfig(key, String(newConfig[key]));
-        }
-      }
-
-      if (isAppsChanged) {
-        const modeStr = newConfig.APP_PROXY_ENABLE === 1 ? newConfig.APP_PROXY_MODE : 'disable';
-        const listValue = newConfig.APP_PROXY_MODE === 'whitelist' ? newConfig.PROXY_APPS_LIST : newConfig.BYPASS_APPS_LIST;
-        await boxBridge.setApps(modeStr, listValue);
-      }
-
-      // Restart service to apply changes
-      await boxBridge.service('restart');
-
-      const st = await waitForStatus(true);
-      setStatus(st);
-      setOriginalConfig(newConfig);
-      notify("已保存并生效");
-    } catch (e: any) {
-      notify("保存失败: " + e.message);
-    }
-    setActionLoading(null);
-  };
-
-  const handleToggleAutoStart = async (v: boolean) => {
-    try {
-      await boxBridge.manualMode(v ? "disable" : "enable");
-      setStatus((prev: any) => ({ ...prev, autoStart: v }));
-    } catch (e: any) {
-      notify("设置失败: " + e.message);
-    }
-  };
+  const { theme, isDark, cycleTheme } = useTheme();
+  const {
+    loading,
+    status,
+    config,
+    appList,
+    actionLoading,
+    hasChanges,
+    handleServiceAction,
+    handleToggle,
+    handleChange,
+    handleSaveAndApply,
+    handleToggleAutoStart,
+  } = useBoxController();
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center min-h-screen ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      <div className={`flex min-h-dvh items-center justify-center ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
         <div className="animate-spin text-indigo-500"><RefreshCw size={28} /></div>
       </div>
     );
   }
 
   return (
-    <div className={`max-w-md mx-auto min-h-screen shadow-2xl relative overflow-hidden font-sans transition-colors duration-300 ${isDark ? 'dark bg-slate-950 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
+    <div className={`mx-auto h-dvh max-w-md overflow-hidden font-sans shadow-2xl transition-colors duration-300 ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-slate-50 text-slate-800'} relative`}>
       {/* Top Navigation */}
       <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors">
         <div className="px-5 py-3.5 flex items-center justify-between">
@@ -243,7 +53,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="pb-24 pt-2 overflow-y-auto h-[calc(100vh-53px)] scrollbar-hide">
+      <main className="h-[calc(100dvh-53px)] overflow-y-auto pb-32 pt-2 scrollbar-hide">
         {activeTab === 'home' && <TabHome status={status} config={config} handleServiceAction={handleServiceAction} actionLoading={actionLoading} handleChange={handleChange} handleToggle={handleToggle} handleToggleAutoStart={handleToggleAutoStart} />}
         {activeTab === 'proxies' && <TabProxies status={status} />}
         {activeTab === 'apps' && <TabApps config={config} handleToggle={handleToggle} handleChange={handleChange} appList={appList} />}
@@ -252,7 +62,7 @@ export default function App() {
 
       {/* Floating Save Button */}
       {hasChanges && (
-        <div className="absolute bottom-20 right-6 z-40 animate-in slide-in-from-bottom-4 zoom-in duration-300">
+        <div className="absolute bottom-16 right-6 z-40 animate-in slide-in-from-bottom-4 zoom-in duration-300">
           <button
             onClick={handleSaveAndApply}
             disabled={actionLoading === 'save'}

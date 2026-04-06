@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Check } from 'lucide-react';
 import { Switch, Select } from '@/components/ui';
+import type { AppInfo, BoxConfig, BoxControllerState } from '@/types/box';
 
 const DEFAULT_ANDROID_ICON =
   'data:image/svg+xml;utf8,' +
@@ -21,19 +22,21 @@ const DEFAULT_ANDROID_ICON =
     </svg>
   `);
 
-export function TabApps({ config, handleToggle, handleChange, appList }: any) {
+type TabAppsProps = Pick<BoxControllerState, 'config' | 'handleToggle' | 'handleChange' | 'appList'>;
+
+export function TabApps({ config, handleToggle, handleChange, appList }: TabAppsProps) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('user');
+  const [filter, setFilter] = useState<'user' | 'system' | 'all'>('user');
 
   const currentListKey = config?.APP_PROXY_MODE === 'whitelist' ? 'PROXY_APPS_LIST' : 'BYPASS_APPS_LIST';
   const rawString = config?.[currentListKey] || '';
 
   const checkedSet = useMemo(() => {
-    return new Set(rawString.split('\n').map((s: string) => s.trim()).filter(Boolean));
+    return new Set(String(rawString).split('\n').map(s => s.trim()).filter(Boolean));
   }, [rawString]);
 
   const filteredApps = useMemo(() => {
-    return (appList || []).filter((app: any) => {
+    return (appList || []).filter((app: AppInfo) => {
       if (filter === 'user' && app.isSystem) return false;
       if (filter === 'system' && !app.isSystem) return false;
       if (search) {
@@ -77,19 +80,19 @@ export function TabApps({ config, handleToggle, handleChange, appList }: any) {
             </div>
             <Select
               className="w-24"
-              value={config?.APP_PROXY_MODE}
+              value={config?.APP_PROXY_MODE || 'blacklist'}
               options={[
                 { l: '黑名单', v: 'blacklist' },
                 { l: '白名单', v: 'whitelist' }
               ]}
-              onChange={(v: string) => handleChange('APP_PROXY_MODE', v)}
+              onChange={(v: string) => handleChange('APP_PROXY_MODE', v as BoxConfig['APP_PROXY_MODE'])}
               disabled={config?.APP_PROXY_ENABLE === 0}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div className="flex space-x-2 overflow-x-auto scrollbar-hide">
-              {['user', 'system', 'all'].map(t => (
+              {(['user', 'system', 'all'] as const).map(t => (
                 <button
                   key={t} onClick={() => setFilter(t)} disabled={config?.APP_PROXY_ENABLE === 0}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${filter === t ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
@@ -108,7 +111,7 @@ export function TabApps({ config, handleToggle, handleChange, appList }: any) {
           {filteredApps.length === 0 ? (
             <div className="text-center text-slate-400 dark:text-slate-500 mt-10 text-sm">未找到应用或列表为空</div>
           ) : (
-            filteredApps.map((app: any) => {
+            filteredApps.map((app: AppInfo) => {
               const isChecked = checkedSet.has(app.packageName);
               return (
                 <div
