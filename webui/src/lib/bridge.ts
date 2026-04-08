@@ -58,6 +58,18 @@ export const boxBridge = {
   // removeMihomoSubscription: (name: string) => runApi(["mihomo-subscription-remove", name]),
 };
 
+export async function openExternalUrl(url: string) {
+  if (typeof exec !== 'function') {
+    throw new Error('KernelSU bridge unavailable');
+  }
+  const command = `am start -a android.intent.action.VIEW -d ${shellQuote(url)}`;
+  const result = await exec(command);
+  const stderr = String(result.stderr ?? '').trim();
+  if (stderr && !/Starting: Intent/i.test(stderr)) {
+    throw new Error(stderr);
+  }
+}
+
 export function discoverPackages(): AppInfo[] {
   try {
     const pkgs = listPackages?.("all");

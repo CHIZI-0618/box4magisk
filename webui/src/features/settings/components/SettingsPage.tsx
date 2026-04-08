@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronRight, ExternalLink, FolderCog, ListFilter, Network, Route, X } from 'lucide-react';
+import { BookOpen, ChevronRight, ExternalLink, FolderCog, FolderGit, Info, ListFilter, Mail, Network, Route, TriangleAlert, X } from 'lucide-react';
 import { InputRow, SectionTitle, SelectRow, SwitchRow } from '@/components/ui';
+import { notify, openExternalUrl } from '@/lib/bridge';
 import { ensureFieldVisible } from '@/lib/focus';
-import type { BoxConfig } from '@/types/box';
+import type { BoxConfig, BoxStatus } from '@/types/box';
 
 const IPV6_MODE_OPTIONS = [
   { l: '关闭代理', v: '0' },
@@ -15,9 +16,19 @@ const MAC_PROXY_MODE_OPTIONS = [
   { l: '白名单', v: 'whitelist' },
 ];
 
-type AdvancedPanelKey = 'routing' | 'interfaces' | 'ip-lists' | 'cn-source' | 'network' | null;
+const CORE_MAINTAINER = 'CHIZI-0618';
+const FRONTEND_MAINTAINER = 'chrysoljq';
+const CORE_MAINTAINER_URL = 'https://github.com/CHIZI-0618';
+const FRONTEND_MAINTAINER_URL = 'https://github.com/chrysoljq';
+const PROJECT_REPO = 'https://github.com/CHIZI-0618/box4magisk';
+const ISSUE_TRACKER = 'https://github.com/CHIZI-0618/box4magisk/issues';
+const UI_FEEDBACK_REPO = 'https://github.com/chrysoljq/box4magisk';
+const WIKI_URL = 'https://github.com/CHIZI-0618/box4magisk/blob/main/README_zh.md';
+
+type AdvancedPanelKey = 'routing' | 'interfaces' | 'ip-lists' | 'cn-source' | 'network' | 'about' | null;
 
 interface SettingsPageProps {
+  status: BoxStatus;
   config: BoxConfig;
   handleToggle: (key: string, value: boolean) => void;
   handleChange: <K extends keyof BoxConfig>(key: K, value: BoxConfig[K]) => void;
@@ -51,6 +62,24 @@ interface StackTextareaProps {
   onChange: (value: string) => void;
   placeholder?: string;
   sub?: string;
+}
+
+interface AboutLinkRowProps {
+  href: string;
+  icon: ReactNode;
+  title: string;
+  sub: string;
+}
+
+interface AboutInfoRowProps {
+  label: string;
+  value: string;
+}
+
+interface MaintainerButtonProps {
+  label: string;
+  value: string;
+  href: string;
 }
 
 function countEntries(value?: string) {
@@ -163,7 +192,55 @@ function StackTextarea({ label, value, onChange, placeholder, sub }: StackTextar
   );
 }
 
-export function SettingsPage({ config, handleToggle, handleChange }: SettingsPageProps) {
+function AboutLinkRow({ href, icon, title, sub }: AboutLinkRowProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void openExternalUrl(href).catch((error: unknown) => {
+          notify(`打开失败: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }}
+      className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center text-slate-400 dark:text-slate-500">{icon}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{title}</div>
+          <div className="mt-0.5 break-words text-xs leading-5 text-slate-500 dark:text-slate-400">{sub}</div>
+        </div>
+      </div>
+      <ExternalLink size={16} className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500" />
+    </button>
+  );
+}
+
+function AboutInfoRow({ label, value }: AboutInfoRowProps) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+      <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">{label}</div>
+      <div className="max-w-[60%] break-all text-right text-xs font-mono text-slate-500 dark:text-slate-400">{value}</div>
+    </div>
+  );
+}
+
+function MaintainerButton({ label, value, href }: MaintainerButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void openExternalUrl(href).catch((error: unknown) => {
+          notify(`打开失败: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }}
+      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+    >
+      {label} {value}
+    </button>
+  );
+}
+
+export function SettingsPage({ status, config, handleToggle, handleChange }: SettingsPageProps) {
   const [activePanel, setActivePanel] = useState<AdvancedPanelKey>(null);
 
   const handleNumberInput = <K extends keyof BoxConfig>(key: K, value: string) => {
@@ -212,8 +289,8 @@ export function SettingsPage({ config, handleToggle, handleChange }: SettingsPag
         <div className="rounded-2xl border border-slate-100 bg-white p-2 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
           <SelectRow label="DNS劫持模式" value={config?.DNS_HIJACK_ENABLE?.toString() || '0'} options={[{ l: '禁用', v: '0' }, { l: 'TPROXY', v: '1' }, { l: 'REDIRECT', v: '2' }]} onChange={(value: string) => handleChange('DNS_HIJACK_ENABLE', parseInt(value, 10))} border={true} />
           <SwitchRow label="绕过大陆 IP" sub="系统级直连，需内核支持 ipset" checked={config?.BYPASS_CN_IP === 1} onChange={(value: boolean) => handleToggle('BYPASS_CN_IP', value)} border={true} />
-          <SwitchRow label="性能模式" sub="启用后优先使用性能路径，兼容性较差时可关闭" checked={config?.PERFORMANCE_MODE === 1} onChange={(value: boolean) => handleToggle('PERFORMANCE_MODE', value)} border={true} />
-          <SwitchRow label="强制 Mark 绕过" sub="对已带核心路由标记的流量强制放行" checked={config?.FORCE_MARK_BYPASS === 1} onChange={(value: boolean) => handleToggle('FORCE_MARK_BYPASS', value)} border={true} />
+          <SwitchRow label="性能模式" sub="减少重复匹配，兼容性差可关闭" checked={config?.PERFORMANCE_MODE === 1} onChange={(value: boolean) => handleToggle('PERFORMANCE_MODE', value)} border={true} />
+          <SwitchRow label="强制 Mark 绕过" sub="带标记流量直接放行，减少回环" checked={config?.FORCE_MARK_BYPASS === 1} onChange={(value: boolean) => handleToggle('FORCE_MARK_BYPASS', value)} border={true} />
           <SwitchRow label="启用 MAC 过滤" sub="需配合热点代理使用" checked={config?.MAC_FILTER_ENABLE === 1} onChange={(value: boolean) => handleToggle('MAC_FILTER_ENABLE', value)} border={false} />
           {config?.MAC_FILTER_ENABLE === 1 && (
             <div className="animate-in fade-in zoom-in-95 px-3 pb-3 pt-0">
@@ -270,8 +347,14 @@ export function SettingsPage({ config, handleToggle, handleChange }: SettingsPag
             icon={<FolderCog size={18} />}
             title="CN IP 数据源"
             sub="设置大陆 IP 数据文件和更新地址"
-            border={false}
             onClick={() => setActivePanel('cn-source')}
+          />
+          <SecondaryEntryRow
+            icon={<Info size={18} />}
+            title="关于与支持"
+            sub="查看版本信息、项目地址和联系开发者方式"
+            border={false}
+            onClick={() => setActivePanel('about')}
           />
         </div>
       </div>
@@ -379,6 +462,38 @@ export function SettingsPage({ config, handleToggle, handleChange }: SettingsPag
               <InputRow label="WiFi 接口名" value={config?.WIFI_INTERFACE || ''} onChange={(value: string) => handleChange('WIFI_INTERFACE', value)} />
               <InputRow label="热点接口名" value={config?.HOTSPOT_INTERFACE || ''} onChange={(value: string) => handleChange('HOTSPOT_INTERFACE', value)} />
               <InputRow label="USB 接口名" value={config?.USB_INTERFACE || ''} onChange={(value: string) => handleChange('USB_INTERFACE', value)} />
+            </div>
+          </div>
+        </FloatingPanel>
+      )}
+
+      {activePanel === 'about' && (
+        <FloatingPanel title="关于与支持" description="" onClose={() => setActivePanel(null)}>
+          <div className="space-y-5">
+            <div className="rounded-3xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+              <div className="text-lg font-bold text-slate-900 dark:text-slate-100">box4magisk</div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Use sing-box, clash, v2ray, xray tunnel proxy on Android devices.</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <MaintainerButton label="核心维护" value={CORE_MAINTAINER} href={CORE_MAINTAINER_URL} />
+                <MaintainerButton label="前端维护" value={FRONTEND_MAINTAINER} href={FRONTEND_MAINTAINER_URL} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">支持与反馈</div>
+              <AboutLinkRow href={PROJECT_REPO} icon={<FolderGit size={18} />} title="项目主页" sub="GitHub 仓库与更新说明" />
+              <AboutLinkRow href={WIKI_URL} icon={<BookOpen size={18} />} title="中文文档" sub="README_zh 与使用说明" />
+              <AboutLinkRow href={ISSUE_TRACKER} icon={<TriangleAlert size={18} />} title="问题反馈" sub="提交 Bug、功能建议和兼容性反馈" />
+              <AboutLinkRow href={UI_FEEDBACK_REPO} icon={<Mail size={18} />} title="UI 反馈入口" sub="WebUI 相关问题和交流反馈" />
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">当前信息</div>
+              <AboutInfoRow label="核心维护" value={CORE_MAINTAINER} />
+              <AboutInfoRow label="当前核心" value={status.bin_name || config.bin_name || '未知'} />
+              <AboutInfoRow label="运行状态" value={status.running ? '运行中' : '未运行'} />
+              <AboutInfoRow label="主配置文件" value={status.box_config_file || '/data/adb/box/scripts/box.config'} />
+              <AboutInfoRow label="TPROXY 配置" value={status.tproxy_config_file || '/data/adb/box/scripts/tproxy.conf'} />
             </div>
           </div>
         </FloatingPanel>
