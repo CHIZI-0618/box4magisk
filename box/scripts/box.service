@@ -282,28 +282,35 @@ probe_tun_index() {
 }
 
 tun_forward_ip_rules() {
-    ip rule $1 iif lo goto 6000 pref 5000
-    ip rule $1 iif ${tun_device} lookup main suppress_prefixlength 0 pref 5010
-    ip rule $1 iif ${tun_device} goto 6000 pref 5020
-    ip rule $1 from 10.0.0.0/8 lookup ${tun_table_index} pref 5030
-    ip rule $1 from 172.16.0.0/12 lookup ${tun_table_index} pref 5040
-    ip rule $1 from 192.168.0.0/16 lookup ${tun_table_index} pref 5050
-    ip rule $1 nop pref 6000
+    # ip rule $1 iif lo goto 6000 pref 5000
+    # ip rule $1 iif ${tun_device} lookup main suppress_prefixlength 0 pref 5010
+    # ip rule $1 iif ${tun_device} goto 6000 pref 5020
+    # ip rule $1 from 10.0.0.0/8 lookup ${tun_table_index} pref 5030
+    # ip rule $1 from 172.16.0.0/12 lookup ${tun_table_index} pref 5040
+    # ip rule $1 from 192.168.0.0/16 lookup ${tun_table_index} pref 5050
+    # ip rule $1 nop pref 6000
 }
 
 tun_forward_ip_rules_del() {
-    ip rule del pref 5000
-    ip rule del pref 5010
-    ip rule del pref 5020
-    ip rule del pref 5030
-    ip rule del pref 5040
-    ip rule del pref 5050
-    ip rule del pref 6000
+    # ip rule del pref 5000
+    # ip rule del pref 5010
+    # ip rule del pref 5020
+    # ip rule del pref 5030
+    # ip rule del pref 5040
+    # ip rule del pref 5050
+    # ip rule del pref 6000
 }
 
 sing_tun_ip_rules() {
-    ip rule $1 from all iif ${tun_device} lookup main suppress_prefixlength 0 pref 8000
-    ip rule $1 lookup main pref 9005
+    # ip rule $1 from all iif ${tun_device} lookup main suppress_prefixlength 0 pref 8000
+    # ip rule $1 lookup main pref 9005
+    ip rule $1 iif lo lookup local_network pref 7000
+    ip rule $1 from all iif ${tun_device} goto 7010 pref 7001
+    ip rule $1 from all lookup 2022 pref 7002
+    ip rule $1 from all nop pref 7010
+    ip -6 rule $1 from all iif ${tun_device} goto 7010 pref 7001
+    ip -6 rule $1 from all lookup 2022 pref 7002
+    ip -6 rule $1 from all nop pref 7010
 }
 
 tun_forward_iptables_rules() {
