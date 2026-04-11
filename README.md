@@ -121,3 +121,8 @@ After creating an empty file `/data/adb/box/manual`:
 ## Changelog
 
 [CHANGELOG](changelog.md)
+
+
+## Project Star Growth Trend Chart
+
+[![Stargazers over time](https://starchart.cc/CHIZI-0618/box4magisk.svg)](https://starchart.cc/CHIZI-0618/box4magisk)
