@@ -118,16 +118,6 @@
 - 日志位于 `/data/adb/box/run/` 目录。
 - 更新文档时，关键章节（`Installation`、`Configuration`、`Usage`、`Uninstallation`、`Changelog`）的改动必须同步到所有语言 README（`README.md`、`README_zh.md`、`README_ru.md`）。
 
-## 卸载
-
-- 从 Magisk Manager，KernelSU Manager 或 APatch 应用卸载本模块，会删除 `/data/adb/service.d/box4_service.sh` 文件，保留 Box 数据目录 `/data/adb/box`
-- 可使用命令清除 Box 数据：`rm -rf /data/adb/box`
-
 ## 更新日志
 
 [CHANGELOG](changelog.md)
-
-
-## 项目 Star 数增长趋势图
-
-[![Stargazers over time](https://starchart.cc/CHIZI-0618/box4magisk.svg)](https://starchart.cc/CHIZI-0618/box4magisk)
