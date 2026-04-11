@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README_zh.md) | [Русский](README_ru.md)
 
-Этот проект — модуль Magisk / KernelSU / APatch для развертывания различных прокси-ядр на Android-устройствах, включая **clash**, **mihomo**, **sing-box**, **v2ray**, **xray** и **hysteria**.
+Этот проект — модуль Magisk / KernelSU / APatch для развертывания различных прокси-ядер на Android-устройствах, включая **clash**, **mihomo**, **sing-box**, **v2ray**, **xray** и **hysteria**.
 
 Поддерживаемые режимы прозрачного прокси:
 - **REDIRECT**: только TCP
@@ -10,7 +10,7 @@
 - **TUN**: TCP + UDP (предоставляется ядром; поддерживается только sing-box, clash, mihomo и xray)
 - **Гибридный режим**: REDIRECT (TCP) + TUN (UDP)
 
-По сути, проект объединяет запускатор прокси-ядра и [AndroidTProxyShell](https://github.com/CHIZI-0618/AndroidTProxyShell) для реализации прозрачного проксирования.
+По сути, проект объединяет лаунчер прокси-ядра и [AndroidTProxyShell](https://github.com/CHIZI-0618/AndroidTProxyShell) для реализации прозрачного проксирования.
 
 ## Disclaimer
 
@@ -20,9 +20,9 @@
 
 Если вы не знакомы с настройкой прокси, рекомендуется сначала использовать более удобные приложения (например, ClashForAndroid, sing-box for Android, v2rayNG, SagerNet и т.д.), чтобы изучить базовые концепции.
 
-## Installation
+## Установка
 
-1. Скачайте последний ZIP-пакет модуля из [Releases](https://github.com/CHIZI-0618/box4magisk/releases).
+1. Скачайте последний ZIP-пакет модуля из [Releases](https://github.com/stayer147/box4root/releases).
 2. Установите его через Magisk Manager, KernelSU Manager или APatch Manager.
 3. Поддерживается онлайн-обновление (после обновления изменения вступают в силу сразу, без перезагрузки).
 
@@ -30,9 +30,9 @@
 
 После установки вручную скачайте исполняемые файлы ядра для архитектуры вашего устройства и поместите их в каталог `/data/adb/box/bin/`.
 
-## Configuration
+## конфигурация
 
-### Selecting the Proxy Core
+### Выбор ядра прокси
 
 Рабочий каталог ядра: `/data/adb/box/<core_name>`  
 Ядро определяется переменной `bin_name` в `/data/adb/box/scripts/box.config`. Доступные варианты:
@@ -44,7 +44,8 @@
 - `v2ray`
 - `hysteria`
 
-**Совет**: `mihomo` и `sing-box` содержат файлы конфигурации по умолчанию, уже подготовленные для прозрачного прокси. Рекомендуется напрямую редактировать секции `proxy-providers` или `outbounds`, чтобы добавить ваши узлы.  
+**Совет**: `mihomo` и `sing-box` содержат файлы конфигурации по умолчанию, уже подготовленные для прозрачного прокси. Рекомендуется напрямую редактировать секции `proxy-providers` или `outbounds`, чтобы добавить ваши узлы.
+
 Для расширенной настройки см. официальную документацию:
 - [Clash](https://github.com/Dreamacro/clash/wiki/configuration)
 - [Mihomo](https://wiki.metacubex.one)
@@ -103,7 +104,7 @@
 
 Установите `PROXY_MODE=core` или любое значение, отличное от 0-2. Правила прозрачного прокси не будут загружены; запустится только ядро (подходит для TUN inbound в sing-box/clash/mihomo).
 
-### Manual Mode
+### Ручной режим
 
 После создания пустого файла `/data/adb/box/manual`:
 - Сервис больше не будет запускаться при загрузке и не сможет управляться через Manager.
@@ -111,14 +112,14 @@
   - Сервис: `/data/adb/box/scripts/box.service start|stop|restart|status`
   - Прозрачный прокси: `/data/adb/box/scripts/box.tproxy start|stop|restart`
 
-## Additional Notes
+## Дополнительные заметки
 
 - После изменения файла конфигурации ядра убедитесь, что порты и другие настройки совпадают с `box.config` и `tproxy.conf`.
 - Модуль автоматически предотвращает зацикливание (обходит локальные IP и использует возможность NETFILTER_XT_MATCH_ADDRTYPE). Однако если устройство имеет публичный IP, всё равно рекомендуется вручную добавить [правила обхода](box/scripts/tproxy.conf#L55-L58).
 - Логи находятся в каталоге `/data/adb/box/run/`.
 - При обновлении документации изменения в ключевых разделах (`Installation`, `Configuration`, `Usage`, `Uninstallation`, `Changelog`) необходимо синхронно отражать во всех языковых README (`README.md`, `README_zh.md`, `README_ru.md`).
 
-## Uninstallation
+## Удаление
 
 - Удаление модуля через Magisk Manager, KernelSU Manager или APatch удалит файл `/data/adb/service.d/box4_service.sh`, но сохранит каталог данных Box `/data/adb/box`.
 - Чтобы очистить данные Box, используйте команду: `rm -rf /data/adb/box`
@@ -126,8 +127,3 @@
 ## Changelog
 
 [CHANGELOG](changelog.md)
-
-
-## Project Star Growth Trend Chart
-
-[![Stargazers over time](https://starchart.cc/CHIZI-0618/box4magisk.svg)](https://starchart.cc/CHIZI-0618/box4magisk)
