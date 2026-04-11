@@ -8,9 +8,10 @@ import { TabProxies } from '@/tabs/TabProxies';
 import { TabApps } from '@/tabs/TabApps';
 import { TabAdvanced } from '@/tabs/TabAdvanced';
 import '@/index.css';
-import { t } from '@/i18n';
+import { t, useLocale } from '@/i18n';
 
 export default function App() {
+  useLocale();
   const [activeTab, setActiveTab] = useState('home');
   const { theme, isDark, cycleTheme } = useTheme();
   const {

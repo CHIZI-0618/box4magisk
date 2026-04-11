@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 export type Locale = 'en' | 'ru' | 'zh';
 
 type Dict = Record<string, string>;
@@ -18,6 +20,7 @@ const dictionaries: Record<Locale, Dict> = {
 
 let currentLocale: Locale = FALLBACK_LOCALE;
 const warnedKeys = new Set<string>();
+const listeners = new Set<() => void>();
 
 function normalizeLocale(input?: string | null): Locale | null {
   if (!input) return null;
@@ -45,8 +48,10 @@ export function getPreferredLocale(): Locale {
 
 export function setLocale(locale: string): Locale {
   const next = normalizeLocale(locale) ?? FALLBACK_LOCALE;
+  if (next === currentLocale) return currentLocale;
   currentLocale = next;
   window.localStorage.setItem(STORAGE_KEY, next);
+  listeners.forEach(listener => listener());
   return currentLocale;
 }
 
@@ -56,6 +61,15 @@ export function getLocale(): Locale {
 
 export function initLocale(): Locale {
   return setLocale(getPreferredLocale());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function useLocale(): Locale {
+  return useSyncExternalStore(subscribe, getLocale, getLocale);
 }
 
 export function t(key: string, params?: Params): string {
