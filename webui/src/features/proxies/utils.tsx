@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ProxyMap } from './types';
 import { cn } from '@/lib/cn';
+import { getLocale, t, tp } from '@/i18n';
 
 export const PROXIES_PREFS_STORAGE_KEY = 'box4:webui:proxies:prefs';
 
@@ -21,7 +22,7 @@ export const formatBytes = (bytes: number) => {
 };
 
 export const formatRelativeTime = (time: number | string) => {
-  if (!time || time.toString().startsWith('0001-01-01')) return '从未更新';
+  if (!time || time.toString().startsWith('0001-01-01')) return t('proxies.time.never_updated');
 
   let dateText = time.toString();
   if (typeof time === 'string' && time.includes('.')) {
@@ -35,22 +36,23 @@ export const formatRelativeTime = (time: number | string) => {
   }
 
   const date = typeof time === 'number' ? new Date(time * 1000) : new Date(dateText);
-  if (isNaN(date.getTime())) return '时间错误';
+  if (isNaN(date.getTime())) return t('proxies.time.invalid_time');
 
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  if (diffInSeconds < -60) return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
-  if (diffInSeconds < 60) return '刚刚';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} 分钟前`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} 小时前`;
-  if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} 天前`;
-  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+  const locale = getLocale();
+  if (diffInSeconds < -60) return date.toLocaleDateString(locale, { month: '2-digit', day: '2-digit' });
+  if (diffInSeconds < 60) return t('proxies.time.just_now');
+  if (diffInSeconds < 3600) return tp('proxies.time.minutes_ago', Math.floor(diffInSeconds / 60));
+  if (diffInSeconds < 86400) return tp('proxies.time.hours_ago', Math.floor(diffInSeconds / 3600));
+  if (diffInSeconds < 2592000) return tp('proxies.time.days_ago', Math.floor(diffInSeconds / 86400));
+  return date.toLocaleDateString(locale, { month: '2-digit', day: '2-digit' });
 };
 
 export const formatDate = (timestamp: number) => {
-  if (!timestamp) return '长期有效';
+  if (!timestamp) return t('proxies.time.never_expire');
   const date = new Date(timestamp * 1000);
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return date.toLocaleDateString(getLocale(), { year: 'numeric', month: '2-digit', day: '2-digit' });
 };
 
 export const NodeRoutingChain = React.memo(({ now, proxies }: { now?: string; proxies: ProxyMap }) => {

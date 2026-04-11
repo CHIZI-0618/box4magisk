@@ -2,6 +2,7 @@ import React from 'react';
 import { Activity, ChevronDown, Clock, Database, RefreshCw, Server, Zap } from 'lucide-react';
 import type { ProxyProvider } from '@/lib/clash';
 import { cn } from '@/lib/cn';
+import { t } from '@/i18n';
 import { formatBytes, formatDate, formatRelativeTime, getLatencyStyle } from '../utils';
 
 interface ProxyProviderCardProps {
@@ -34,7 +35,7 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
           </div>
           <div className="text-[12px] text-slate-400 dark:text-slate-500 mt-2.5 flex items-center space-x-4">
             <span className="flex items-center"><Activity size={12} className="mr-1" /> {formatRelativeTime(provider.updatedAt)}</span>
-            <span className="font-semibold flex items-center"><Server size={12} className="mr-1" /> {provider.proxies?.length || 0} 节点</span>
+            <span className="font-semibold flex items-center"><Server size={12} className="mr-1" /> {provider.proxies?.length || 0} {t('proxies.nodes')}</span>
           </div>
         </div>
 
@@ -43,6 +44,8 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
             onClick={e => onTest(e, name)}
             disabled={isTesting}
             className={cn('p-2 rounded-xl transition-all', isTesting ? 'text-indigo-500 animate-pulse' : 'hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-800')}
+            title={t('proxies.tooltip.test_provider')}
+            aria-label={t('proxies.aria.test_provider')}
           >
             <Zap size={18} />
           </button>
@@ -50,6 +53,8 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
             onClick={e => onUpdate(e, name)}
             disabled={isUpdating}
             className={cn('p-2 rounded-xl transition-all', isUpdating ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500' : 'hover:text-amber-500 hover:bg-slate-50 dark:hover:bg-slate-800')}
+            title={t('proxies.tooltip.update_provider')}
+            aria-label={t('proxies.aria.update_provider')}
           >
             <RefreshCw size={18} className={isUpdating ? 'animate-spin' : ''} />
           </button>
@@ -72,7 +77,7 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
               </div>
               <div className="flex items-center space-x-1.5 text-orange-500 font-medium">
                 <Clock size={14} />
-                <span>到期: {formatDate(sub.Expire)}</span>
+                <span>{t('proxies.expire')}: {formatDate(sub.Expire)}</span>
               </div>
             </div>
             <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -102,7 +107,8 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
                   <div
                     className={cn('text-[10px] font-mono font-bold bg-slate-100/80 dark:bg-slate-800 px-1.5 py-0.5 rounded transition-all cursor-pointer shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95', style.text)}
                     onClick={e => onTestNode(e, name, [node.name])}
-                    title="点击测速"
+                    title={t('proxies.test_latency')}
+                    aria-label={t('proxies.aria.test_node_latency')}
                   >
                     {ms ? `${ms} ms` : (isNodeTesting ? '...' : '-')}
                   </div>
