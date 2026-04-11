@@ -5,12 +5,7 @@ import { ClashClient, type ClashMemory } from '@/lib/clash';
 import { useProxyData } from '@/features/proxies/hooks/useProxyData';
 import { MODE_OPTIONS } from '@/features/proxies/types';
 import type { BoxConfig, BoxStatus } from '@/types/box';
-
-const PROXY_MODE_OPTIONS = [
-  { l: '自动', v: '0' },
-  { l: 'TPROXY', v: '1' },
-  { l: 'REDIRECT', v: '2' },
-];
+import { t } from '@/i18n';
 
 const BIN_NAME_OPTIONS = ['sing-box', 'clash', 'mihomo', 'xray', 'v2ray', 'hysteria'];
 
@@ -55,6 +50,12 @@ export function DashboardPage({ status, config, handleServiceAction, actionLoadi
   const { currentMode, handleChangeMode } = useProxyData(status);
   const [memory, setMemory] = useState<ClashMemory | null>(null);
 
+  const proxyModeOptions = [
+    { l: t('dashboard.proxy_mode.auto'), v: '0' },
+    { l: 'TPROXY', v: '1' },
+    { l: 'REDIRECT', v: '2' },
+  ];
+
   const client = useMemo(() => {
     return new ClashClient(String(status?.clash_api_port || config?.clash_api_port || 9090), String(status?.clash_api_secret || config?.clash_api_secret || ''));
   }, [status?.clash_api_port, status?.clash_api_secret, config?.clash_api_port, config?.clash_api_secret]);
@@ -94,16 +95,16 @@ export function DashboardPage({ status, config, handleServiceAction, actionLoadi
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-800 mt-2 transition-colors">
         <div className="flex justify-between items-center mb-5">
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">当前核心 / 模式</span>
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">{t('dashboard.core_mode')}</span>
             <div className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-slate-900 dark:text-slate-100 capitalize">{config?.bin_name || '未知'}</span>
+              <span className="text-xl font-bold text-slate-900 dark:text-slate-100 capitalize">{config?.bin_name || t('dashboard.unknown')}</span>
               <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-md uppercase transition-colors">{formatProxyMode(config?.PROXY_MODE)}</span>
             </div>
           </div>
           <div className="min-w-[88px] rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 px-3 py-2 shadow-sm">
             <div className="flex items-center justify-end gap-1.5 text-[11px] font-semibold uppercase tracking-wide opacity-80">
               <MemoryStick size={14} />
-              <span>内存</span>
+              <span>{t('dashboard.memory')}</span>
             </div>
             <div className="mt-1 text-right text-sm font-bold tabular-nums">
               {status?.running ? formatMemory(memory) : '--'}
@@ -122,8 +123,8 @@ export function DashboardPage({ status, config, handleServiceAction, actionLoadi
             {actionLoading === 'start' || actionLoading === 'stop'
               ? <RefreshCw size={18} className="animate-spin" />
               : status?.running
-                ? <><Square size={16} className="mr-2" /> 停止 Box</>
-                : <><Play size={16} className="mr-2" /> 启动 Box</>}
+                ? <><Square size={16} className="mr-2" /> {t('dashboard.stop_box')}</>
+                : <><Play size={16} className="mr-2" /> {t('dashboard.start_box')}</>}
           </button>
           <button
             onClick={() => handleServiceAction('restart')}
@@ -132,35 +133,35 @@ export function DashboardPage({ status, config, handleServiceAction, actionLoadi
           >
             {actionLoading === 'restart'
               ? <RefreshCw size={16} className="animate-spin" />
-              : <><RefreshCw size={16} className="mr-2" /> 重启 Box</>}
+              : <><RefreshCw size={16} className="mr-2" /> {t('dashboard.restart_box')}</>}
           </button>
         </div>
       </div>
 
       <div>
-        <SectionTitle title="全局路由规则" />
+        <SectionTitle title={t('dashboard.global_routing')} />
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
           <SelectRow
-            label="切换出站模式"
+            label={t('dashboard.outbound_mode')}
             value={currentMode.toLowerCase()}
             options={MODE_OPTIONS.map(m => ({ l: m.label, v: m.id }))}
             onChange={(value: string) => handleChangeMode(value as any)}
             border={true}
           />
-          <SelectRow label="切换代理模式" value={String(config?.PROXY_MODE ?? 0)} options={PROXY_MODE_OPTIONS} onChange={(value: string) => handleChange('PROXY_MODE', parseInt(value, 10))} border={true} />
-          <SelectRow label="切换代理核心" value={config?.bin_name || 'sing-box'} options={BIN_NAME_OPTIONS} onChange={(value: string) => handleChange('bin_name', value)} border={true} />
-          <SwitchRow label="开机自启动" sub="设备启动时自动运行" checked={status?.autoStart === true} onChange={handleToggleAutoStart} border={true} />
-          <SwitchRow label="拦截 QUIC" sub="防止应用通过 QUIC 绕过分流规则" checked={config?.BLOCK_QUIC === 1} onChange={(value: boolean) => handleToggle('BLOCK_QUIC', value)} border={false} />
+          <SelectRow label={t('dashboard.proxy_mode')} value={String(config?.PROXY_MODE ?? 0)} options={proxyModeOptions} onChange={(value: string) => handleChange('PROXY_MODE', parseInt(value, 10))} border={true} />
+          <SelectRow label={t('dashboard.proxy_core')} value={config?.bin_name || 'sing-box'} options={BIN_NAME_OPTIONS} onChange={(value: string) => handleChange('bin_name', value)} border={true} />
+          <SwitchRow label={t('dashboard.autostart')} sub={t('dashboard.autostart.sub')} checked={status?.autoStart === true} onChange={handleToggleAutoStart} border={true} />
+          <SwitchRow label={t('dashboard.block_quic')} sub={t('dashboard.block_quic.sub')} checked={config?.BLOCK_QUIC === 1} onChange={(value: boolean) => handleToggle('BLOCK_QUIC', value)} border={false} />
         </div>
       </div>
 
       <div>
-        <SectionTitle title="代理网络接口" />
+        <SectionTitle title={t('dashboard.network_interfaces')} />
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-2 shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
-          <SwitchRow label="移动数据" icon={<Smartphone size={18} />} checked={config?.PROXY_MOBILE === 1} onChange={(value: boolean) => handleToggle('PROXY_MOBILE', value)} border={true} />
-          <SwitchRow label="无线网络" icon={<Wifi size={18} />} checked={config?.PROXY_WIFI === 1} onChange={(value: boolean) => handleToggle('PROXY_WIFI', value)} border={true} />
-          <SwitchRow label="移动热点" icon={<Radio size={18} />} checked={config?.PROXY_HOTSPOT === 1} onChange={(value: boolean) => handleToggle('PROXY_HOTSPOT', value)} border={true} />
-          <SwitchRow label="USB共享" icon={<Usb size={18} />} checked={config?.PROXY_USB === 1} onChange={(value: boolean) => handleToggle('PROXY_USB', value)} border={false} />
+          <SwitchRow label={t('dashboard.mobile_data')} icon={<Smartphone size={18} />} checked={config?.PROXY_MOBILE === 1} onChange={(value: boolean) => handleToggle('PROXY_MOBILE', value)} border={true} />
+          <SwitchRow label={t('dashboard.wifi')} icon={<Wifi size={18} />} checked={config?.PROXY_WIFI === 1} onChange={(value: boolean) => handleToggle('PROXY_WIFI', value)} border={true} />
+          <SwitchRow label={t('dashboard.hotspot')} icon={<Radio size={18} />} checked={config?.PROXY_HOTSPOT === 1} onChange={(value: boolean) => handleToggle('PROXY_HOTSPOT', value)} border={true} />
+          <SwitchRow label={t('dashboard.usb_tethering')} icon={<Usb size={18} />} checked={config?.PROXY_USB === 1} onChange={(value: boolean) => handleToggle('PROXY_USB', value)} border={false} />
         </div>
       </div>
     </div>
