@@ -118,16 +118,6 @@ After creating an empty file `/data/adb/box/manual`:
 - Logs are located in the `/data/adb/box/run/` directory.
 - When updating documentation, changes in key sections (`Installation`, `Configuration`, `Usage`, `Uninstallation`, `Changelog`) must be synchronized across all language README files (`README.md`, `README_zh.md`, `README_ru.md`).
 
-## Uninstallation
-
-- Uninstalling the module from Magisk Manager, KernelSU Manager, or APatch will remove the `/data/adb/service.d/box4_service.sh` file but retain the Box data directory `/data/adb/box`.
-- To clear Box data, use the command: `rm -rf /data/adb/box`
-
 ## Changelog
 
 [CHANGELOG](changelog.md)
-
-
-## Project Star Growth Trend Chart
-
-[![Stargazers over time](https://starchart.cc/CHIZI-0618/box4magisk.svg)](https://starchart.cc/CHIZI-0618/box4magisk)
