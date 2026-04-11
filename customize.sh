@@ -101,15 +101,19 @@ download_sing_box_core() {
   local output_bin="$3"
   local url archive extract_dir source_bin
 
+  ui_print "  * sing-box: поиск последнего релиза (${arch})..."
   url="$(github_latest_asset_url "SagerNet/sing-box" ".*/sing-box-[^\"]*-android-${arch}\\.tar\\.gz$")" || return 1
   archive="${tmp_dir}/sing-box.tar.gz"
   extract_dir="${tmp_dir}/sing-box"
 
   mkdir -p "$extract_dir" || return 1
+  ui_print "  * sing-box: скачивание..."
   download_to_file "$url" "$archive" || return 1
+  ui_print "  * sing-box: распаковка..."
   tar -xzf "$archive" -C "$extract_dir" || return 1
   source_bin="$(find "$extract_dir" -type f -name sing-box | head -n 1)"
   [ -n "$source_bin" ] || return 1
+  ui_print "  * sing-box: установка..."
   install_file "$source_bin" "$output_bin" || return 1
 }
 
@@ -119,13 +123,17 @@ download_mihomo_core() {
   local output_bin="$3"
   local url archive
 
+  ui_print "  * mihomo: поиск последнего релиза (${arch})..."
   url="$(github_latest_asset_url "MetaCubeX/mihomo" ".*/mihomo-android-${arch}-[^\"]*\\.gz$")" || return 1
   archive="${tmp_dir}/mihomo.gz"
 
+  ui_print "  * mihomo: скачивание..."
   download_to_file "$url" "$archive" || return 1
   mkdir -p "$(dirname "$output_bin")" || return 1
+  ui_print "  * mihomo: распаковка..."
   gzip -dc "$archive" > "$output_bin" || return 1
   chmod 700 "$output_bin" || return 1
+  ui_print "  * mihomo: установка..."
 }
 
 download_xray_core() {
@@ -135,15 +143,19 @@ download_xray_core() {
   local asset_dir="$4"
   local url archive extract_dir source_bin
 
+  ui_print "  * xray: поиск последнего релиза (${arch})..."
   url="$(github_latest_asset_url "XTLS/Xray-core" ".*/Xray-android-${arch}\\.zip$")" || return 1
   archive="${tmp_dir}/xray.zip"
   extract_dir="${tmp_dir}/xray"
 
   mkdir -p "$extract_dir" || return 1
+  ui_print "  * xray: скачивание..."
   download_to_file "$url" "$archive" || return 1
+  ui_print "  * xray: распаковка..."
   unzip -oq "$archive" -d "$extract_dir" || return 1
   source_bin="$(find "$extract_dir" -type f -name xray | head -n 1)"
   [ -n "$source_bin" ] || return 1
+  ui_print "  * xray: установка..."
   install_file "$source_bin" "$output_bin" || return 1
 
   mkdir -p "$asset_dir" || return 1
@@ -170,6 +182,7 @@ auto_download_cores_install() {
   trap 'rm -rf "$tmp_dir"' EXIT INT TERM
 
   ui_print "- Downloading proxy cores for this device..."
+  ui_print "- Please wait: this step can take a few minutes depending on network speed."
 
   if download_sing_box_core "$tmp_dir" "$sing_box_arch" "/data/adb/box/bin/sing-box" 2>/dev/null; then
     ui_print "  * sing-box: installed"
