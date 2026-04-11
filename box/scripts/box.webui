@@ -58,11 +58,6 @@ fetch_url() {
         return $?
     fi
 
-    if command_exists busybox; then
-        busybox wget -qO- "$url"
-        return $?
-    fi
-
     return 127
 }
 
@@ -80,11 +75,6 @@ download_to_file() {
         return $?
     fi
 
-    if command_exists busybox; then
-        busybox wget -O "$output" "$url"
-        return $?
-    fi
-
     return 127
 }
 
@@ -94,11 +84,6 @@ extract_zip_file() {
 
     if command_exists unzip; then
         unzip -oq "$archive" -d "$output_dir"
-        return $?
-    fi
-
-    if command_exists busybox; then
-        busybox unzip -oq "$archive" -d "$output_dir"
         return $?
     fi
 
@@ -116,11 +101,6 @@ extract_gzip_to_file() {
 
     if command_exists gunzip; then
         gunzip -c "$archive" > "$output_file"
-        return $?
-    fi
-
-    if command_exists busybox; then
-        busybox gunzip -c "$archive" > "$output_file"
         return $?
     fi
 
@@ -445,7 +425,7 @@ check_log_summary_json() {
     if [ -f "$check_log" ]; then
         exists=true
         size="$(wc -c < "$check_log" 2>/dev/null | tr -d ' ' )"
-        modified="$(busybox date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
+        modified="$(date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
         preview="$(tail -n 20 "$check_log" 2>/dev/null)"
     fi
 
@@ -568,7 +548,7 @@ validate_toggle_request() {
 
 service_running() {
     source_box_config
-    busybox pidof "$bin_name" >/dev/null 2>&1
+    pidof "$bin_name" >/dev/null 2>&1
 }
 
 cmd_status() {
@@ -584,7 +564,7 @@ cmd_status() {
 
     if service_running; then
         running=true
-        pid="$(busybox pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
+        pid="$(pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
     fi
 
     if manual_mode_enabled; then

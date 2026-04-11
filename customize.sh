@@ -26,11 +26,6 @@ download_to_file() {
     return $?
   fi
 
-  if command_exists busybox; then
-    busybox wget -O "$output" "$url"
-    return $?
-  fi
-
   return 127
 }
 
@@ -44,11 +39,6 @@ fetch_url() {
 
   if command_exists wget; then
     wget -qO- "$url"
-    return $?
-  fi
-
-  if command_exists busybox; then
-    busybox wget -qO- "$url"
     return $?
   fi
 
