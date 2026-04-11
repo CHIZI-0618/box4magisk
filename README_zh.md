@@ -1,6 +1,6 @@
 # Box4Magisk / KernelSU / APatch
 
-[English](README.md) | [中文](README_zh.md)
+[English](README.md) | [中文](README_zh.md) | [Русский](README_ru.md)
 
 本项目是一个 Magisk / KernelSU / APatch 模块，用于在 Android 设备上部署多种代理核心，包括 **clash**、**mihomo**、**sing-box**、**v2ray**、**xray** 和 **hysteria**。
 
@@ -34,7 +34,7 @@
 
 ### 选择代理核心
 
-核心工作目录：`/data/adb/box/<核心名字>`  
+核心工作目录：`/data/adb/box/<core_name>`  
 核心由 `/data/adb/box/scripts/box.config` 中的 `bin_name` 决定，可选值：
 
 - `sing-box`（推荐，默认）
@@ -78,7 +78,7 @@
 | `PROXY_IPV6`           | `0`            | 是否代理 IPv6（1=代理，0=禁用；在 REDIRECT 模式下，模块会自动检查内核对 `IP6_NF_NAT` 和 `IP6_NF_TARGET_REDIRECT` 的支持，若不支持则 IPv6 代理将失效） |
 | `APP_PROXY_ENABLE`     | `0`            | 启用按应用代理（1=启用） |
 | `APP_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定应用）或 `whitelist`（仅代理指定应用） |
-| `BYPASS_APPS_LIST` / `PROXY_APPS_LIST` | 空 | 应用列表，格式：`"用户ID:包名"`（多条用空格分隔，例如 `"0:com.android.systemui 10:com.tencent.mm"`） |
+| `BYPASS_APPS_LIST` / `PROXY_APPS_LIST` | 空 | 应用列表，格式：`"userID:packageName"`（多条用空格分隔，例如 `"0:com.android.systemui 10:com.tencent.mm"`） |
 | `BYPASS_CN_IP`         | `0`            | 是否绕过中国大陆 IP（1=启用，0=禁用；需要内核支持 `ipset`，模块会自动检查支持情况，若不支持则功能失效；启用后会从指定 URL 下载 IP 列表） |
 | `MAC_FILTER_ENABLE`    | `0`            | 启用 MAC 地址过滤（1=启用，0=禁用；仅在热点模式 `PROXY_HOTSPOT=1` 下生效） |
 | `MAC_PROXY_MODE`       | `blacklist`    | `blacklist`（绕过指定 MAC）或 `whitelist`（仅代理指定 MAC） |
@@ -116,6 +116,7 @@
 - 修改核心配置文件后，请确保与 `box.config` 和 `tproxy.conf` 中的端口等设置一致。
 - 模块会自动防回环（绕过本地 IP 并利用 NETFILTER_XT_MATCH_ADDRTYPE 特性），但若设备有公网 IP，仍建议手动添加[绕过规则](box/scripts/tproxy.conf#L55-L58)。
 - 日志位于 `/data/adb/box/run/` 目录。
+- 更新文档时，关键章节（`Installation`、`Configuration`、`Usage`、`Uninstallation`、`Changelog`）的改动必须同步到所有语言 README（`README.md`、`README_zh.md`、`README_ru.md`）。
 
 ## 卸载
 
