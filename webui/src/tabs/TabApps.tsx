@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Search, Check } from 'lucide-react';
 import { Switch, Select } from '@/components/ui';
 import type { AppInfo, BoxConfig, BoxControllerState } from '@/types/box';
+import { t } from '@/i18n';
 
 const DEFAULT_ANDROID_ICON =
   'data:image/svg+xml;utf8,' +
@@ -59,7 +60,7 @@ export function TabApps({ config, handleToggle, handleChange, appList }: TabApps
     <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-200">
       <div className="pb-2 shrink-0 mt-2">
         <div className="bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl px-4 py-3 border border-indigo-100 dark:border-indigo-500/20 flex items-center justify-between shadow-sm transition-colors mx-4">
-          <div className="font-bold text-indigo-900 dark:text-indigo-100 transition-colors">应用分流</div>
+          <div className="font-bold text-indigo-900 dark:text-indigo-100 transition-colors">{t('apps.title')}</div>
           <Switch checked={config?.APP_PROXY_ENABLE === 1} onChange={(v: boolean) => handleToggle('APP_PROXY_ENABLE', v)} />
         </div>
       </div>
@@ -71,7 +72,7 @@ export function TabApps({ config, handleToggle, handleChange, appList }: TabApps
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
               <input
                 type="text"
-                placeholder="搜索应用或包名..."
+                placeholder={t('apps.search.placeholder')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 disabled={config?.APP_PROXY_ENABLE === 0}
@@ -82,8 +83,8 @@ export function TabApps({ config, handleToggle, handleChange, appList }: TabApps
               className="w-24"
               value={config?.APP_PROXY_MODE || 'blacklist'}
               options={[
-                { l: '黑名单', v: 'blacklist' },
-                { l: '白名单', v: 'whitelist' }
+                { l: t('apps.mode.blacklist'), v: 'blacklist' },
+                { l: t('apps.mode.whitelist'), v: 'whitelist' }
               ]}
               onChange={(v: string) => handleChange('APP_PROXY_MODE', v as BoxConfig['APP_PROXY_MODE'])}
               disabled={config?.APP_PROXY_ENABLE === 0}
@@ -92,24 +93,24 @@ export function TabApps({ config, handleToggle, handleChange, appList }: TabApps
 
           <div className="flex items-center justify-between">
             <div className="flex space-x-2 overflow-x-auto scrollbar-hide">
-              {(['user', 'system', 'all'] as const).map(t => (
+              {(['user', 'system', 'all'] as const).map(filterType => (
                 <button
-                  key={t} onClick={() => setFilter(t)} disabled={config?.APP_PROXY_ENABLE === 0}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${filter === t ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
+                  key={filterType} onClick={() => setFilter(filterType)} disabled={config?.APP_PROXY_ENABLE === 0}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${filter === filterType ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
                 >
-                  {t === 'user' ? '用户' : t === 'system' ? '系统' : '全部'}
+                  {filterType === 'user' ? t('apps.filter.user') : filterType === 'system' ? t('apps.filter.system') : t('apps.filter.all')}
                 </button>
               ))}
             </div>
             <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded-md shrink-0 transition-colors">
-              已选 {checkedSet.size}
+              {t('apps.selected', { count: checkedSet.size })}
             </span>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 pb-32">
           {filteredApps.length === 0 ? (
-            <div className="text-center text-slate-400 dark:text-slate-500 mt-10 text-sm">未找到应用或列表为空</div>
+            <div className="text-center text-slate-400 dark:text-slate-500 mt-10 text-sm">{t('apps.empty')}</div>
           ) : (
             filteredApps.map((app: AppInfo) => {
               const isChecked = checkedSet.has(app.packageName);

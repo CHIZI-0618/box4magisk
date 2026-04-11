@@ -4,6 +4,7 @@ import { InputRow, SectionTitle, SelectRow, SwitchRow } from '@/components/ui';
 import { notify, openExternalUrl } from '@/lib/bridge';
 import { ensureFieldVisible } from '@/lib/focus';
 import type { BoxConfig, BoxStatus } from '@/types/box';
+import { t } from '@/i18n';
 
 const IPV6_MODE_OPTIONS = [
   { l: '关闭代理', v: '0' },
@@ -250,15 +251,15 @@ export function SettingsPage({ status, config, handleToggle, handleChange }: Set
   return (
     <div className="px-4 space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
       <div>
-        <SectionTitle title="Mihomo 面板入口" />
+        <SectionTitle title={t('settings.panel_entry')} />
         <div className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between p-1">
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 transition-colors">控制地址</span>
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 transition-colors">{t('settings.control_address')}</span>
             <span className="text-sm font-mono text-slate-500 dark:text-slate-400 transition-colors">127.0.0.1:{config?.clash_api_port || 9090}</span>
           </div>
           <div className="flex items-center justify-between p-1">
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 transition-colors">Secret 密钥</span>
-            <span className="text-sm font-mono text-slate-500 dark:text-slate-400 transition-colors">{config?.clash_api_secret || '未设置'}</span>
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 transition-colors">{t('settings.secret')}</span>
+            <span className="text-sm font-mono text-slate-500 dark:text-slate-400 transition-colors">{config?.clash_api_secret || t('settings.not_set')}</span>
           </div>
 
           <div className="pt-2">
@@ -269,18 +270,18 @@ export function SettingsPage({ status, config, handleToggle, handleChange }: Set
               className="flex w-full items-center justify-center space-x-2 rounded-xl bg-indigo-50 py-3 text-sm font-bold text-indigo-600 shadow-sm transition-all hover:bg-indigo-100 active:scale-95 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20"
             >
               <ExternalLink size={16} />
-              <span>打开 YACD 面板</span>
+              <span>{t('settings.open_yacd')}</span>
             </a>
           </div>
         </div>
       </div>
 
       <div>
-        <SectionTitle title="协议细节" />
+        <SectionTitle title={t('settings.protocol_details')} />
         <div className="rounded-2xl border border-slate-100 bg-white p-2 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-          <SwitchRow label="代理 TCP" checked={config?.PROXY_TCP === 1} onChange={(value: boolean) => handleToggle('PROXY_TCP', value)} border={true} />
-          <SwitchRow label="代理 UDP" checked={config?.PROXY_UDP === 1} onChange={(value: boolean) => handleToggle('PROXY_UDP', value)} border={true} />
-          <SelectRow label="IPv6 模式" value={String(config?.PROXY_IPV6 ?? 0)} options={IPV6_MODE_OPTIONS} onChange={(value: string) => handleChange('PROXY_IPV6', parseInt(value, 10))} border={false} />
+          <SwitchRow label={t('settings.proxy_tcp')} checked={config?.PROXY_TCP === 1} onChange={(value: boolean) => handleToggle('PROXY_TCP', value)} border={true} />
+          <SwitchRow label={t('settings.proxy_udp')} checked={config?.PROXY_UDP === 1} onChange={(value: boolean) => handleToggle('PROXY_UDP', value)} border={true} />
+          <SelectRow label={t('settings.ipv6_mode')} value={String(config?.PROXY_IPV6 ?? 0)} options={IPV6_MODE_OPTIONS} onChange={(value: string) => handleChange('PROXY_IPV6', parseInt(value, 10))} border={false} />
         </div>
       </div>
 

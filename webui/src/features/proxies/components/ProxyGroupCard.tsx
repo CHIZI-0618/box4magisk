@@ -3,6 +3,7 @@ import { ArrowUpDown, Check, ChevronDown, Clock, SortAsc, Zap } from 'lucide-rea
 import type { Proxy } from '@/lib/clash';
 import type { NodeSortType, ProxyMap } from '../types';
 import { cn } from '@/lib/cn';
+import { t } from '@/i18n';
 import { getLatencyStyle, LatencyBar, NodeRoutingChain } from '../utils';
 
 interface ProxyGroupCardProps {
@@ -69,7 +70,7 @@ export const ProxyGroupCard = React.memo((props: ProxyGroupCardProps) => {
           <button
             onClick={e => onToggleSort(e, groupName)}
             className={cn('p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center space-x-1', sortType !== 'default' && 'text-indigo-500')}
-            title={`当前排序: ${sortType}`}
+            title={`${t('proxies.sort.current')}: ${sortType}`}
           >
             {sortType === 'name' ? <SortAsc size={18} /> : (sortType === 'latency' ? <Clock size={18} /> : <ArrowUpDown size={18} />)}
           </button>
@@ -103,12 +104,12 @@ export const ProxyGroupCard = React.memo((props: ProxyGroupCardProps) => {
         <div className="mt-5 grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
           {missingNodeDetails > 0 && (
             <div className="col-span-2 px-3 py-2 rounded-2xl border border-amber-200/70 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/20 text-[11px] text-amber-700 dark:text-amber-300">
-              当前组有 {missingNodeDetails} 个节点存在，但未匹配到详情。
+              {t('proxies.group.missing_details', { count: missingNodeDetails })}
             </div>
           )}
           {sortedNodes.length === 0 && (
             <div className="col-span-2 px-3 py-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-[12px] text-slate-400 dark:text-slate-500">
-              当前代理组没有可显示的节点
+              {t('proxies.group.empty')}
             </div>
           )}
           {sortedNodes.map(node => {
@@ -146,7 +147,7 @@ export const ProxyGroupCard = React.memo((props: ProxyGroupCardProps) => {
                   <div
                     className={cn('text-[10px] font-mono font-bold bg-slate-100/80 dark:bg-slate-800 px-1.5 py-0.5 rounded transition-all cursor-pointer shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95', style.text)}
                     onClick={e => onTestGroup(e, groupName, [node.name])}
-                    title="点击测速"
+                    title={t('proxies.test_latency')}
                   >
                     {ms ? `${ms} ms` : (testingNodes[node.name] ? '...' : '-')}
                   </div>
