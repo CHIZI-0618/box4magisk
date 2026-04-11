@@ -119,11 +119,6 @@
 - Логи находятся в каталоге `/data/adb/box/run/`.
 - При обновлении документации изменения в ключевых разделах (`Installation`, `Configuration`, `Usage`, `Uninstallation`, `Changelog`) необходимо синхронно отражать во всех языковых README (`README.md`, `README_zh.md`, `README_ru.md`).
 
-## Удаление
-
-- Удаление модуля через Magisk Manager, KernelSU Manager или APatch удалит файл `/data/adb/service.d/box4_service.sh`, но сохранит каталог данных Box `/data/adb/box`.
-- Чтобы очистить данные Box, используйте команду: `rm -rf /data/adb/box`
-
 ## Changelog
 
 [CHANGELOG](changelog.md)
