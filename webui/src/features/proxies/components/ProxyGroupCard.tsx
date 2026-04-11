@@ -71,6 +71,7 @@ export const ProxyGroupCard = React.memo((props: ProxyGroupCardProps) => {
             onClick={e => onToggleSort(e, groupName)}
             className={cn('p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center space-x-1', sortType !== 'default' && 'text-indigo-500')}
             title={`${t('proxies.sort.current')}: ${sortType}`}
+            aria-label={t('proxies.aria.sort_group')}
           >
             {sortType === 'name' ? <SortAsc size={18} /> : (sortType === 'latency' ? <Clock size={18} /> : <ArrowUpDown size={18} />)}
           </button>
@@ -78,6 +79,8 @@ export const ProxyGroupCard = React.memo((props: ProxyGroupCardProps) => {
             onClick={e => onTestGroup(e, groupName, group.all || [])}
             disabled={isTesting}
             className={cn('p-1.5 rounded-lg transition-colors', isTesting ? 'animate-pulse text-indigo-500' : 'hover:text-indigo-500 hover:bg-slate-50 dark:hover:bg-slate-800/80')}
+            title={t('proxies.tooltip.test_group')}
+            aria-label={t('proxies.aria.test_group')}
           >
             <Zap size={18} />
           </button>
@@ -148,6 +151,7 @@ export const ProxyGroupCard = React.memo((props: ProxyGroupCardProps) => {
                     className={cn('text-[10px] font-mono font-bold bg-slate-100/80 dark:bg-slate-800 px-1.5 py-0.5 rounded transition-all cursor-pointer shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95', style.text)}
                     onClick={e => onTestGroup(e, groupName, [node.name])}
                     title={t('proxies.test_latency')}
+                    aria-label={t('proxies.aria.test_node_latency')}
                   >
                     {ms ? `${ms} ms` : (testingNodes[node.name] ? '...' : '-')}
                   </div>

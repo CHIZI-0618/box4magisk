@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { boxBridge, discoverPackages, notify } from '@/lib/bridge';
+import { t } from '@/i18n';
 import type { AppInfo, BoxConfig, BoxControllerState, BoxStatus } from '@/types/box';
 
 function normalizeStatus(rawStatus: Partial<BoxStatus> | null | undefined): BoxStatus {
@@ -74,11 +75,11 @@ export function useBoxController(): BoxControllerState {
       }, 50);
 
       if (statusResult.status === 'rejected' && configResult.status === 'rejected') {
-        notify(`初始化失败: ${statusResult.reason?.message || configResult.reason?.message || '无法获取状态和配置'}`);
+        notify(t('notify.init_failed', { error: statusResult.reason?.message || configResult.reason?.message || t('notify.unknown_status_config_error') }));
       } else if (statusResult.status === 'rejected') {
-        notify(`状态读取失败: ${statusResult.reason?.message || '未知错误'}`);
+        notify(t('notify.status_read_failed', { error: statusResult.reason?.message || t('notify.unknown_error') }));
       } else if (configResult.status === 'rejected') {
-        notify(`配置读取失败: ${configResult.reason?.message || '未知错误'}`);
+        notify(t('notify.config_read_failed', { error: configResult.reason?.message || t('notify.unknown_error') }));
       }
 
       setLoading(false);
@@ -114,9 +115,9 @@ export function useBoxController(): BoxControllerState {
             ? await waitForStatus(false)
             : await boxBridge.status();
       setStatus(nextStatus);
-      notify(action === 'stop' ? '服务已停止' : '服务已启动');
+      notify(t(action === 'stop' ? 'notify.service_stopped' : 'notify.service_started'));
     } catch (e: unknown) {
-      notify(`操作失败: ${e instanceof Error ? e.message : String(e)}`);
+      notify(t('notify.action_failed', { error: e instanceof Error ? e.message : String(e) }));
     }
     setActionLoading(null);
   };
@@ -170,9 +171,9 @@ export function useBoxController(): BoxControllerState {
       const nextStatus = await waitForStatus(true);
       setStatus(nextStatus);
       setOriginalConfig(newConfig);
-      notify('已保存并生效');
+      notify(t('notify.saved_and_applied'));
     } catch (e: unknown) {
-      notify(`保存失败: ${e instanceof Error ? e.message : String(e)}`);
+      notify(t('notify.save_failed', { error: e instanceof Error ? e.message : String(e) }));
     }
     setActionLoading(null);
   };
@@ -182,7 +183,7 @@ export function useBoxController(): BoxControllerState {
       await boxBridge.manualMode(value ? 'disable' : 'enable');
       setStatus(prev => ({ ...prev, autoStart: value }));
     } catch (e: unknown) {
-      notify(`设置失败: ${e instanceof Error ? e.message : String(e)}`);
+      notify(t('notify.set_failed', { error: e instanceof Error ? e.message : String(e) }));
     }
   };
 

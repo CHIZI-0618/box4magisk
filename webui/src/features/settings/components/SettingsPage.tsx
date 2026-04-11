@@ -153,7 +153,7 @@ function FloatingPanel({ title, description, onClose, children }: FloatingPanelP
             type="button"
             onClick={onClose}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <X size={18} />
           </button>
@@ -204,7 +204,7 @@ function AboutLinkRow({ href, icon, title, sub }: AboutLinkRowProps) {
       type="button"
       onClick={() => {
         void openExternalUrl(href).catch((error: unknown) => {
-          notify(`打开失败: ${error instanceof Error ? error.message : String(error)}`);
+          notify(t('notify.open_failed', { error: error instanceof Error ? error.message : String(error) }));
         });
       }}
       className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70"
@@ -236,7 +236,7 @@ function MaintainerButton({ label, value, href }: MaintainerButtonProps) {
       type="button"
       onClick={() => {
         void openExternalUrl(href).catch((error: unknown) => {
-          notify(`打开失败: ${error instanceof Error ? error.message : String(error)}`);
+          notify(t('notify.open_failed', { error: error instanceof Error ? error.message : String(error) }));
         });
       }}
       className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
