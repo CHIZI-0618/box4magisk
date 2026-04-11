@@ -36,6 +36,10 @@ function interpolate(template: string, params?: Params): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(params[key] ?? `{${key}}`));
 }
 
+function getPluralCategory(count: number): Intl.LDMLPluralRule {
+  return new Intl.PluralRules(currentLocale).select(count);
+}
+
 export function getPreferredLocale(): Locale {
   const stored = normalizeLocale(window.localStorage.getItem(STORAGE_KEY));
   if (stored) return stored;
@@ -91,4 +95,18 @@ export function t(key: string, params?: Params): string {
   }
 
   return key;
+}
+
+export function tp(key: string, count: number, params?: Params): string {
+  const category = getPluralCategory(count);
+  const pluralKey = `${key}.${category}`;
+  const fallbackPluralKey = `${key}.other`;
+
+  if (dictionaries[currentLocale]?.[pluralKey] || dictionaries[FALLBACK_LOCALE]?.[pluralKey]) {
+    return t(pluralKey, { ...params, count });
+  }
+  if (dictionaries[currentLocale]?.[fallbackPluralKey] || dictionaries[FALLBACK_LOCALE]?.[fallbackPluralKey]) {
+    return t(fallbackPluralKey, { ...params, count });
+  }
+  return t(key, { ...params, count });
 }

@@ -44,6 +44,8 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
             onClick={e => onTest(e, name)}
             disabled={isTesting}
             className={cn('p-2 rounded-xl transition-all', isTesting ? 'text-indigo-500 animate-pulse' : 'hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-800')}
+            title={t('proxies.tooltip.test_provider')}
+            aria-label={t('proxies.aria.test_provider')}
           >
             <Zap size={18} />
           </button>
@@ -51,6 +53,8 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
             onClick={e => onUpdate(e, name)}
             disabled={isUpdating}
             className={cn('p-2 rounded-xl transition-all', isUpdating ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500' : 'hover:text-amber-500 hover:bg-slate-50 dark:hover:bg-slate-800')}
+            title={t('proxies.tooltip.update_provider')}
+            aria-label={t('proxies.aria.update_provider')}
           >
             <RefreshCw size={18} className={isUpdating ? 'animate-spin' : ''} />
           </button>
@@ -104,6 +108,7 @@ export const ProxyProviderCard = React.memo((props: ProxyProviderCardProps) => {
                     className={cn('text-[10px] font-mono font-bold bg-slate-100/80 dark:bg-slate-800 px-1.5 py-0.5 rounded transition-all cursor-pointer shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95', style.text)}
                     onClick={e => onTestNode(e, name, [node.name])}
                     title={t('proxies.test_latency')}
+                    aria-label={t('proxies.aria.test_node_latency')}
                   >
                     {ms ? `${ms} ms` : (isNodeTesting ? '...' : '-')}
                   </div>

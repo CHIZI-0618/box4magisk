@@ -48,7 +48,7 @@ export default function App() {
               {status.running ? `PID: ${status.pid}` : t('app.status.stopped')}
             </div>
           </div>
-          <button onClick={cycleTheme} className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title={t('app.theme.toggle')}>
+          <button onClick={cycleTheme} className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title={t('app.theme.toggle')} aria-label={t('app.theme.toggle')}>
             {theme === 'system' ? <Smartphone size={16} /> : theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
         </div>

@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClashClient } from '@/lib/clash';
 import { notify } from '@/lib/bridge';
+import { t } from '@/i18n';
 import type { ProviderMap, ProxyMap } from '../types';
 
 function useIsMounted() {
@@ -117,7 +118,7 @@ export function useProxyData(status: { running: boolean; clash_api_port: string;
         [groupName]: { ...prev[groupName], now: nodeName },
       }) : null);
     } catch (e: unknown) {
-      if (isMounted.current) notify(`切换失败: ${e instanceof Error ? e.message : String(e)}`);
+      if (isMounted.current) notify(t('notify.proxy_switch_failed', { error: e instanceof Error ? e.message : String(e) }));
     }
   }, [client, isMounted, proxies]);
 
@@ -130,7 +131,7 @@ export function useProxyData(status: { running: boolean; clash_api_port: string;
     } catch (e: unknown) {
       if (isMounted.current) {
         setCurrentMode(oldMode);
-        notify(`模式切换失败: ${e instanceof Error ? e.message : String(e)}`);
+        notify(t('notify.mode_switch_failed', { error: e instanceof Error ? e.message : String(e) }));
       }
     }
   }, [client, currentMode, isMounted]);
@@ -144,9 +145,9 @@ export function useProxyData(status: { running: boolean; clash_api_port: string;
       const providerData = await client.getProviders();
       if (!isMounted.current) return;
       setProviders(providerData);
-      notify(`已更新: ${name}`);
+      notify(t('notify.provider_updated', { name }));
     } catch (e: unknown) {
-      if (isMounted.current) notify(`更新失败: ${e instanceof Error ? e.message : String(e)}`);
+      if (isMounted.current) notify(t('notify.update_failed', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       if (isMounted.current) setUpdatingProvider(null);
     }
@@ -177,7 +178,7 @@ export function useProxyData(status: { running: boolean; clash_api_port: string;
         return next;
       });
     } catch (e: unknown) {
-      if (isMounted.current) notify(`测速失败: ${e instanceof Error ? e.message : String(e)}`);
+      if (isMounted.current) notify(t('notify.latency_test_failed', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       if (isMounted.current) markTestingEnd(ownerKey, providerNodes);
     }
@@ -199,7 +200,7 @@ export function useProxyData(status: { running: boolean; clash_api_port: string;
         return next;
       });
     } catch {
-      if (isMounted.current) notify('测速出错');
+      if (isMounted.current) notify(t('notify.latency_test_error'));
     } finally {
       if (isMounted.current) markTestingEnd(ownerKey, nodes);
     }
