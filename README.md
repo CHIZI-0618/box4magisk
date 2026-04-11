@@ -117,11 +117,6 @@ After creating an empty file `/data/adb/box/manual`:
 - The module automatically prevents looping (bypasses local IP and utilizes the NETFILTER_XT_MATCH_ADDRTYPE feature). However, if your device has a public IP, it is still recommended to manually add [bypass rules](box/scripts/tproxy.conf#L55-L58).
 - Logs are located in the `/data/adb/box/run/` directory.
 
-## Uninstallation
-
-- Uninstalling the module from Magisk Manager, KernelSU Manager, or APatch will remove the `/data/adb/service.d/box4_service.sh` file but retain the Box data directory `/data/adb/box`.
-- To clear Box data, use the command: `rm -rf /data/adb/box`
-
 ## Changelog
 
 [CHANGELOG](changelog.md)
