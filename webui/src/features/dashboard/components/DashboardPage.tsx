@@ -4,7 +4,7 @@ import { SectionTitle, SwitchRow, SelectRow } from '@/components/ui';
 import { ClashClient, type ClashMemory } from '@/lib/clash';
 import { useProxyData } from '@/features/proxies/hooks/useProxyData';
 import { MODE_OPTIONS } from '@/features/proxies/types';
-import type { BoxConfig, BoxStatus } from '@/types/box';
+import type { BoxConfig, BoxStatus, CoreInfo } from '@/types/box';
 import { t } from '@/i18n';
 
 const BIN_NAME_OPTIONS = ['sing-box', 'clash', 'mihomo', 'xray', 'v2ray', 'hysteria'];
@@ -39,6 +39,7 @@ const formatMemory = (memory: ClashMemory | null) => {
 interface DashboardPageProps {
   status: BoxStatus;
   config: BoxConfig;
+  coreInfo: CoreInfo | null;
   handleServiceAction: (action: string) => void;
   actionLoading: string | null;
   handleChange: <K extends keyof BoxConfig>(key: K, value: BoxConfig[K]) => void;
@@ -46,7 +47,7 @@ interface DashboardPageProps {
   handleToggleAutoStart: (value: boolean) => void;
 }
 
-export function DashboardPage({ status, config, handleServiceAction, actionLoading, handleChange, handleToggle, handleToggleAutoStart }: DashboardPageProps) {
+export function DashboardPage({ status, config, coreInfo, handleServiceAction, actionLoading, handleChange, handleToggle, handleToggleAutoStart }: DashboardPageProps) {
   const { currentMode, handleChangeMode } = useProxyData(status);
   const [memory, setMemory] = useState<ClashMemory | null>(null);
 
@@ -92,6 +93,25 @@ export function DashboardPage({ status, config, handleServiceAction, actionLoadi
 
   return (
     <div className="px-4 space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      {coreInfo && (
+        <div className="bg-amber-50 dark:bg-amber-500/10 rounded-2xl p-4 border border-amber-200 dark:border-amber-700/40">
+          <div className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-2">{t('dashboard.core_versions')}</div>
+          <div className="space-y-1.5 text-sm text-amber-900 dark:text-amber-100">
+            {Object.entries(coreInfo.cores).map(([coreName, details]) => (
+              <div key={coreName} className="flex items-center justify-between gap-4">
+                <span className="font-medium">
+                  {coreName}
+                  {coreInfo.selected === coreName ? ` · ${t('dashboard.selected_core')}` : ''}
+                </span>
+                <span className="text-xs md:text-sm text-right">
+                  {details.installed} / {details.latest}
+                  {details.update_required ? ` · ${t('dashboard.update_required')}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-800 mt-2 transition-colors">
         <div className="flex justify-between items-center mb-5">
           <div className="flex flex-col">
