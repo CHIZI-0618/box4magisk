@@ -1,6 +1,6 @@
 # Box4Magisk / KernelSU / APatch
 
-[English](README.md) | [中文](README_zh.md)
+[English](README.md) | [中文](README_zh.md) | [Русский](README_ru.md)
 
 This project is a Magisk / KernelSU / APatch module designed to deploy various proxy cores on Android devices, including **clash**, **mihomo**, **sing-box**, **v2ray**, **xray**, and **hysteria**.
 
@@ -116,6 +116,7 @@ After creating an empty file `/data/adb/box/manual`:
 - After modifying the core configuration file, please ensure the ports and other settings are consistent with those in `box.config` and `tproxy.conf`.
 - The module automatically prevents looping (bypasses local IP and utilizes the NETFILTER_XT_MATCH_ADDRTYPE feature). However, if your device has a public IP, it is still recommended to manually add [bypass rules](box/scripts/tproxy.conf#L55-L58).
 - Logs are located in the `/data/adb/box/run/` directory.
+- When updating documentation, changes in key sections (`Installation`, `Configuration`, `Usage`, `Uninstallation`, `Changelog`) must be synchronized across all language README files (`README.md`, `README_zh.md`, `README_ru.md`).
 
 ## Uninstallation
 
