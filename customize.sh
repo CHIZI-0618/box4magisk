@@ -184,29 +184,78 @@ auto_download_cores_install() {
   ui_print "- Downloading proxy cores for this device..."
   ui_print "- Please wait: this step can take a few minutes depending on network speed."
 
-  if download_sing_box_core "$tmp_dir" "$sing_box_arch" "/data/adb/box/bin/sing-box" 2>/dev/null; then
-    ui_print "  * sing-box: installed"
-    ok_count=$((ok_count + 1))
+  if [ "$DOWNLOAD_SING_BOX" = "1" ]; then
+    if download_sing_box_core "$tmp_dir" "$sing_box_arch" "/data/adb/box/bin/sing-box" 2>/dev/null; then
+      ui_print "  * sing-box: installed"
+      ok_count=$((ok_count + 1))
+    else
+      ui_print "  * sing-box: failed"
+    fi
   else
-    ui_print "  * sing-box: failed"
+    ui_print "  * sing-box: skipped by user"
   fi
 
-  if download_mihomo_core "$tmp_dir" "$mihomo_arch" "/data/adb/box/bin/mihomo" 2>/dev/null; then
-    ui_print "  * mihomo: installed"
-    ok_count=$((ok_count + 1))
+  if [ "$DOWNLOAD_MIHOMO" = "1" ]; then
+    if download_mihomo_core "$tmp_dir" "$mihomo_arch" "/data/adb/box/bin/mihomo" 2>/dev/null; then
+      ui_print "  * mihomo: installed"
+      ok_count=$((ok_count + 1))
+    else
+      ui_print "  * mihomo: failed"
+    fi
   else
-    ui_print "  * mihomo: failed"
+    ui_print "  * mihomo: skipped by user"
   fi
 
-  if download_xray_core "$tmp_dir" "$xray_arch" "/data/adb/box/bin/xray" "/data/adb/box/xray" 2>/dev/null; then
-    ui_print "  * xray: installed"
-    ok_count=$((ok_count + 1))
+  if [ "$DOWNLOAD_XRAY" = "1" ]; then
+    if download_xray_core "$tmp_dir" "$xray_arch" "/data/adb/box/bin/xray" "/data/adb/box/xray" 2>/dev/null; then
+      ui_print "  * xray: installed"
+      ok_count=$((ok_count + 1))
+    else
+      ui_print "  * xray: failed"
+    fi
   else
-    ui_print "  * xray: failed"
+    ui_print "  * xray: skipped by user"
   fi
 
   if [ "$ok_count" -eq 0 ]; then
     ui_print "- Warning: Unable to auto-download cores during installation."
+  fi
+}
+
+choose_core_downloads() {
+  DOWNLOAD_SING_BOX=1
+  DOWNLOAD_MIHOMO=1
+  DOWNLOAD_XRAY=1
+
+  if ! is_true "$BOOTMODE"; then
+    return 0
+  fi
+
+  if ! type chooseport >/dev/null 2>&1; then
+    ui_print "- chooseport is not available, download all cores by default."
+    return 0
+  fi
+
+  ui_print " "
+  ui_print "- Select cores to download during installation:"
+  ui_print "- Vol+ = Yes, Vol- = No"
+
+  if chooseport "Download sing-box core?" "Yes" "No" 1; then
+    DOWNLOAD_SING_BOX=1
+  else
+    DOWNLOAD_SING_BOX=0
+  fi
+
+  if chooseport "Download mihomo core?" "Yes" "No" 1; then
+    DOWNLOAD_MIHOMO=1
+  else
+    DOWNLOAD_MIHOMO=0
+  fi
+
+  if chooseport "Download xray core?" "Yes" "No" 1; then
+    DOWNLOAD_XRAY=1
+  else
+    DOWNLOAD_XRAY=0
   fi
 }
 
@@ -258,6 +307,7 @@ fi
 
 mkdir -p /data/adb/box/bin/
 mkdir -p /data/adb/box/run/
+choose_core_downloads
 auto_download_cores_install
 
 mv -f "$MODPATH/box4_service.sh" "$service_dir/"
