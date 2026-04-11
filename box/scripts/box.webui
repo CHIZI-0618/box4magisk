@@ -58,11 +58,6 @@ fetch_url() {
         return $?
     fi
 
-    if command_exists busybox; then
-        busybox wget -qO- "$url"
-        return $?
-    fi
-
     return 127
 }
 
@@ -80,11 +75,6 @@ download_to_file() {
         return $?
     fi
 
-    if command_exists busybox; then
-        busybox wget -O "$output" "$url"
-        return $?
-    fi
-
     return 127
 }
 
@@ -94,11 +84,6 @@ extract_zip_file() {
 
     if command_exists unzip; then
         unzip -oq "$archive" -d "$output_dir"
-        return $?
-    fi
-
-    if command_exists busybox; then
-        busybox unzip -oq "$archive" -d "$output_dir"
         return $?
     fi
 
@@ -116,11 +101,6 @@ extract_gzip_to_file() {
 
     if command_exists gunzip; then
         gunzip -c "$archive" > "$output_file"
-        return $?
-    fi
-
-    if command_exists busybox; then
-        busybox gunzip -c "$archive" > "$output_file"
         return $?
     fi
 
@@ -153,6 +133,16 @@ github_latest_asset_url() {
     printf '%s' "$url"
 }
 
+github_latest_tag() {
+    local repo="$1"
+    local response tag
+
+    response="$(fetch_url "https://api.github.com/repos/${repo}/releases/latest")" || return 1
+    tag="$(printf '%s\n' "$response" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    [ -n "$tag" ] || return 1
+    printf '%s' "$tag"
+}
+
 detect_download_arch() {
     local abi machine
 
@@ -176,6 +166,63 @@ detect_download_arch() {
             return 1
             ;;
     esac
+}
+
+core_installed_version() {
+    local core="$1"
+    local bin_file="${box_path}/bin/${core}"
+    local output version
+
+    [ -x "$bin_file" ] || return 1
+
+    case "$core" in
+        sing-box)
+            output="$("$bin_file" version 2>/dev/null | head -n 1)"
+            version="$(printf '%s\n' "$output" | sed -n 's/.*version \([^ ]*\).*/\1/p' | head -n 1)"
+            ;;
+        mihomo)
+            output="$("$bin_file" -v 2>/dev/null | head -n 1)"
+            version="$(printf '%s\n' "$output" | sed -n 's/.*MetaCubeX\/mihomo \([^ ]*\).*/\1/p' | head -n 1)"
+            ;;
+        xray)
+            output="$("$bin_file" version 2>/dev/null | head -n 1)"
+            version="$(printf '%s\n' "$output" | sed -n 's/.*Xray \([^ ]*\).*/\1/p' | head -n 1)"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    [ -n "$version" ] || return 1
+    printf '%s' "$version"
+}
+
+core_json_entry() {
+    local name="$1"
+    local repo="$2"
+    local installed latest update_required
+
+    installed="$(core_installed_version "$name" 2>/dev/null || true)"
+    latest="$(github_latest_tag "$repo" 2>/dev/null || true)"
+
+    [ -n "$installed" ] || installed="not-installed"
+    [ -n "$latest" ] || latest="unknown"
+    update_required=false
+
+    if [ "$installed" = "not-installed" ]; then
+        update_required=true
+    elif [ "$latest" != "unknown" ]; then
+        local normalized_installed normalized_latest
+        normalized_installed="$(printf '%s' "$installed" | sed 's/^v//')"
+        normalized_latest="$(printf '%s' "$latest" | sed 's/^v//')"
+        [ "$normalized_installed" != "$normalized_latest" ] && update_required=true
+    fi
+
+    printf '"%s":{"installed":"%s","latest":"%s","update_required":%s}' \
+        "$(json_escape "$name")" \
+        "$(json_escape "$installed")" \
+        "$(json_escape "$latest")" \
+        "$update_required"
 }
 
 install_file() {
@@ -378,7 +425,7 @@ check_log_summary_json() {
     if [ -f "$check_log" ]; then
         exists=true
         size="$(wc -c < "$check_log" 2>/dev/null | tr -d ' ' )"
-        modified="$(busybox date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
+        modified="$(date -r "$check_log" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"
         preview="$(tail -n 20 "$check_log" 2>/dev/null)"
     fi
 
@@ -501,7 +548,7 @@ validate_toggle_request() {
 
 service_running() {
     source_box_config
-    busybox pidof "$bin_name" >/dev/null 2>&1
+    pidof "$bin_name" >/dev/null 2>&1
 }
 
 cmd_status() {
@@ -517,7 +564,7 @@ cmd_status() {
 
     if service_running; then
         running=true
-        pid="$(busybox pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
+        pid="$(pidof "$bin_name" 2>/dev/null | awk '{print $1}')"
     fi
 
     if manual_mode_enabled; then
@@ -839,8 +886,20 @@ cmd_download_cores() {
     emit_ok "download-cores" "{\"arch\":{\"sing-box\":\"$(json_escape "$sing_box_arch")\",\"mihomo\":\"$(json_escape "$mihomo_arch")\",\"xray\":\"$(json_escape "$xray_arch")\"},\"installed\":$ok_count,\"failed\":$fail_count,\"results\":{${json_results}}}"
 }
 
+cmd_core_info() {
+    source_box_config
+
+    local sing_box mihomo xray selected
+    sing_box="$(core_json_entry "sing-box" "SagerNet/sing-box")"
+    mihomo="$(core_json_entry "mihomo" "MetaCubeX/mihomo")"
+    xray="$(core_json_entry "xray" "XTLS/Xray-core")"
+    selected="$(config_get_clean "bin_name")"
+
+    emit_ok "core-info" "{\"selected\":\"$(json_escape "$selected")\",\"cores\":{${sing_box},${mihomo},${xray}}}"
+}
+
 cmd_help() {
-    emit_ok "help" '["status","get-config","set-config KEY [VALUE]","set-number KEY VALUE","toggle KEY 0|1","service start|stop|restart|status","tproxy start|stop|restart|status","manual-mode [status|enable|disable]","check-log [LINES]","apps","set-apps whitelist|blacklist|disable [LIST]","mihomo-panel-url [HOST] [PORT] [SECRET] [http|https]","download-cores","capabilities"]'
+    emit_ok "help" '["status","get-config","set-config KEY [VALUE]","set-number KEY VALUE","toggle KEY 0|1","service start|stop|restart|status","tproxy start|stop|restart|status","manual-mode [status|enable|disable]","check-log [LINES]","apps","set-apps whitelist|blacklist|disable [LIST]","mihomo-panel-url [HOST] [PORT] [SECRET] [http|https]","download-cores","core-info","capabilities"]'
 }
 
 command="$1"
@@ -860,6 +919,7 @@ case "$command" in
     set-apps) cmd_set_apps "$@" ;;
     mihomo-panel-url) cmd_mihomo_panel_url "$@" ;;
     download-cores) cmd_download_cores "$@" ;;
+    core-info) cmd_core_info "$@" ;;
     capabilities) cmd_capabilities ;;
     help|"") cmd_help ;;
     *) emit_error "unsupported command: $command" "$command" ;;

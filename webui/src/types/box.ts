@@ -89,12 +89,24 @@ export interface BoxConfig {
   [key: string]: string | number | boolean | undefined;
 }
 
+export interface CoreInfoItem {
+  installed: string;
+  latest: string;
+  update_required: boolean;
+}
+
+export interface CoreInfo {
+  selected: string;
+  cores: Record<string, CoreInfoItem>;
+}
+
 export interface BoxControllerState {
   loading: boolean;
   status: BoxStatus;
   config: BoxConfig;
   appList: AppInfo[];
   actionLoading: string | null;
+  coreInfo: CoreInfo | null;
   hasChanges: boolean;
   handleServiceAction: (action: string) => Promise<void>;
   handleToggle: (key: string, value: boolean) => void;

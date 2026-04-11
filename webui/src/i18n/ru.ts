@@ -50,6 +50,9 @@ export const ru: Record<string, string> = {
   'dashboard.hotspot': 'Точка доступа',
   'dashboard.usb_tethering': 'USB-модем',
   'dashboard.proxy_mode.auto': 'Авто',
+  'dashboard.core_versions': 'Версии бинарей ядра',
+  'dashboard.selected_core': 'выбрано',
+  'dashboard.update_required': 'нужно обновить',
 
   'settings.panel_entry': 'Вход в панель Mihomo',
   'settings.control_address': 'Адрес управления',

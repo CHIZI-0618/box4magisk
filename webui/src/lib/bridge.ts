@@ -51,6 +51,7 @@ export const boxBridge = {
   apps: () => runApi(["apps"]),
   setApps: (mode: "whitelist" | "blacklist" | "disable", value = "") => runApi(["set-apps", mode, value]),
   mihomoPanel: () => runApi(["mihomo-panel-url"]),
+  coreInfo: () => runApi(["core-info"]),
   // mihomoSubscriptions: () => runApi(["mihomo-subscriptions"]),
   // addMihomoSubscription: (name: string, url: string) => runApi(["mihomo-subscription-add", name, url]),
   // updateMihomoSubscription: (currentName: string, nextName: string, url: string) =>

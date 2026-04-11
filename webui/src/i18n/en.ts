@@ -50,6 +50,9 @@ export const en: Record<string, string> = {
   'dashboard.hotspot': 'Hotspot',
   'dashboard.usb_tethering': 'USB tethering',
   'dashboard.proxy_mode.auto': 'Auto',
+  'dashboard.core_versions': 'Core binary versions',
+  'dashboard.selected_core': 'selected',
+  'dashboard.update_required': 'update required',
 
   'settings.panel_entry': 'Mihomo panel entry',
   'settings.control_address': 'Control address',

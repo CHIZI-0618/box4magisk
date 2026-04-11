@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { boxBridge, discoverPackages, notify } from '@/lib/bridge';
 import { t } from '@/i18n';
-import type { AppInfo, BoxConfig, BoxControllerState, BoxStatus } from '@/types/box';
+import type { AppInfo, BoxConfig, BoxControllerState, BoxStatus, CoreInfo } from '@/types/box';
 
 function normalizeStatus(rawStatus: Partial<BoxStatus> | null | undefined): BoxStatus {
   const autoStartValue = rawStatus?.autostart_enabled;
@@ -51,14 +51,16 @@ export function useBoxController(): BoxControllerState {
   const [config, setConfig] = useState<BoxConfig>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [appList, setAppList] = useState<AppInfo[]>([]);
+  const [coreInfo, setCoreInfo] = useState<CoreInfo | null>(null);
 
   const hasChanges = useMemo(() => JSON.stringify(originalConfig) !== JSON.stringify(config), [originalConfig, config]);
 
   useEffect(() => {
     const init = async () => {
-      const [statusResult, configResult] = await Promise.allSettled([
+      const [statusResult, configResult, coreInfoResult] = await Promise.allSettled([
         boxBridge.status(),
         boxBridge.getConfig(),
+        boxBridge.coreInfo(),
       ]);
 
       if (statusResult.status === 'fulfilled') {
@@ -68,6 +70,9 @@ export function useBoxController(): BoxControllerState {
       if (configResult.status === 'fulfilled') {
         setConfig(configResult.value as BoxConfig);
         setOriginalConfig(configResult.value as BoxConfig);
+      }
+      if (coreInfoResult.status === 'fulfilled') {
+        setCoreInfo(coreInfoResult.value as CoreInfo);
       }
 
       setTimeout(() => {
@@ -193,6 +198,7 @@ export function useBoxController(): BoxControllerState {
     config,
     appList,
     actionLoading,
+    coreInfo,
     hasChanges,
     handleServiceAction,
     handleToggle,

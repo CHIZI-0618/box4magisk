@@ -8,6 +8,257 @@ is_true() {
   [ "$1" = true ] || [ "$1" = "true" ]
 }
 
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+download_to_file() {
+  local url="$1"
+  local output="$2"
+
+  if command_exists curl; then
+    curl -fL --connect-timeout 20 --retry 2 -o "$output" "$url"
+    return $?
+  fi
+
+  if command_exists wget; then
+    wget -O "$output" "$url"
+    return $?
+  fi
+
+  return 127
+}
+
+fetch_url() {
+  local url="$1"
+
+  if command_exists curl; then
+    curl -fsSL --connect-timeout 20 --retry 2 "$url"
+    return $?
+  fi
+
+  if command_exists wget; then
+    wget -qO- "$url"
+    return $?
+  fi
+
+  return 127
+}
+
+github_latest_asset_url() {
+  local repo="$1"
+  local pattern="$2"
+  local response url
+
+  response="$(fetch_url "https://api.github.com/repos/${repo}/releases/latest")" || return 1
+  url="$(printf '%s\n' "$response" \
+    | grep -o '"browser_download_url":[[:space:]]*"[^"]*"' \
+    | sed 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)"/\1/' \
+    | grep -E "$pattern" \
+    | head -n 1)"
+
+  [ -n "$url" ] || return 1
+  printf '%s' "$url"
+}
+
+detect_download_arch() {
+  local abi machine
+
+  abi="$(getprop ro.product.cpu.abi 2>/dev/null)"
+  machine="$(uname -m 2>/dev/null)"
+
+  case "${abi}:${machine}" in
+    arm64-v8a:*|*:aarch64|*:arm64)
+      printf 'sing-box=arm64 mihomo=arm64-v8 xray=arm64-v8a'
+      ;;
+    armeabi-v7a:*|*:armv7l|*:armv8l|*:arm)
+      printf 'sing-box=armv7 mihomo=armv7 xray=arm32-v7a'
+      ;;
+    x86_64:*|*:x86_64|*:amd64)
+      printf 'sing-box=amd64 mihomo=amd64 xray=64'
+      ;;
+    x86:*|*:i686|*:i386)
+      printf 'sing-box=386 mihomo=386 xray=32'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+install_file() {
+  local source_file="$1"
+  local target_file="$2"
+
+  mkdir -p "$(dirname "$target_file")" || return 1
+  cp "$source_file" "$target_file" || return 1
+  chmod 700 "$target_file" || return 1
+}
+
+download_sing_box_core() {
+  local tmp_dir="$1"
+  local arch="$2"
+  local output_bin="$3"
+  local url archive extract_dir source_bin
+
+  ui_print "  * sing-box: поиск последнего релиза (${arch})..."
+  url="$(github_latest_asset_url "SagerNet/sing-box" ".*/sing-box-[^\"]*-android-${arch}\\.tar\\.gz$")" || return 1
+  archive="${tmp_dir}/sing-box.tar.gz"
+  extract_dir="${tmp_dir}/sing-box"
+
+  mkdir -p "$extract_dir" || return 1
+  ui_print "  * sing-box: скачивание..."
+  download_to_file "$url" "$archive" || return 1
+  ui_print "  * sing-box: распаковка..."
+  tar -xzf "$archive" -C "$extract_dir" || return 1
+  source_bin="$(find "$extract_dir" -type f -name sing-box | head -n 1)"
+  [ -n "$source_bin" ] || return 1
+  ui_print "  * sing-box: установка..."
+  install_file "$source_bin" "$output_bin" || return 1
+}
+
+download_mihomo_core() {
+  local tmp_dir="$1"
+  local arch="$2"
+  local output_bin="$3"
+  local url archive
+
+  ui_print "  * mihomo: поиск последнего релиза (${arch})..."
+  url="$(github_latest_asset_url "MetaCubeX/mihomo" ".*/mihomo-android-${arch}-[^\"]*\\.gz$")" || return 1
+  archive="${tmp_dir}/mihomo.gz"
+
+  ui_print "  * mihomo: скачивание..."
+  download_to_file "$url" "$archive" || return 1
+  mkdir -p "$(dirname "$output_bin")" || return 1
+  ui_print "  * mihomo: распаковка..."
+  gzip -dc "$archive" > "$output_bin" || return 1
+  chmod 700 "$output_bin" || return 1
+  ui_print "  * mihomo: установка..."
+}
+
+download_xray_core() {
+  local tmp_dir="$1"
+  local arch="$2"
+  local output_bin="$3"
+  local asset_dir="$4"
+  local url archive extract_dir source_bin
+
+  ui_print "  * xray: поиск последнего релиза (${arch})..."
+  url="$(github_latest_asset_url "XTLS/Xray-core" ".*/Xray-android-${arch}\\.zip$")" || return 1
+  archive="${tmp_dir}/xray.zip"
+  extract_dir="${tmp_dir}/xray"
+
+  mkdir -p "$extract_dir" || return 1
+  ui_print "  * xray: скачивание..."
+  download_to_file "$url" "$archive" || return 1
+  ui_print "  * xray: распаковка..."
+  unzip -oq "$archive" -d "$extract_dir" || return 1
+  source_bin="$(find "$extract_dir" -type f -name xray | head -n 1)"
+  [ -n "$source_bin" ] || return 1
+  ui_print "  * xray: установка..."
+  install_file "$source_bin" "$output_bin" || return 1
+
+  mkdir -p "$asset_dir" || return 1
+  [ -f "${extract_dir}/geoip.dat" ] && cp "${extract_dir}/geoip.dat" "${asset_dir}/geoip.dat"
+  [ -f "${extract_dir}/geosite.dat" ] && cp "${extract_dir}/geosite.dat" "${asset_dir}/geosite.dat"
+}
+
+auto_download_cores_install() {
+  local arch_map sing_box_arch mihomo_arch xray_arch tmp_dir ok_count
+  ok_count=0
+
+  arch_map="$(detect_download_arch)" || {
+    ui_print "- Warning: Unsupported architecture, skip auto-download."
+    return 0
+  }
+  sing_box_arch="$(printf '%s\n' "$arch_map" | sed -n 's/.*sing-box=\([^ ]*\).*/\1/p')"
+  mihomo_arch="$(printf '%s\n' "$arch_map" | sed -n 's/.*mihomo=\([^ ]*\).*/\1/p')"
+  xray_arch="$(printf '%s\n' "$arch_map" | sed -n 's/.*xray=\([^ ]*\).*/\1/p')"
+
+  tmp_dir="$(mktemp -d /data/local/tmp/box4-install.XXXXXX 2>/dev/null || mktemp -d /tmp/box4-install.XXXXXX 2>/dev/null)" || {
+    ui_print "- Warning: Failed to create temp dir, skip auto-download."
+    return 0
+  }
+  trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+
+  ui_print "- Downloading proxy cores for this device..."
+  ui_print "- Please wait: this step can take a few minutes depending on network speed."
+
+  if [ "$DOWNLOAD_SING_BOX" = "1" ]; then
+    if download_sing_box_core "$tmp_dir" "$sing_box_arch" "/data/adb/box/bin/sing-box" 2>/dev/null; then
+      ui_print "  * sing-box: installed"
+      ok_count=$((ok_count + 1))
+    else
+      ui_print "  * sing-box: failed"
+    fi
+  else
+    ui_print "  * sing-box: skipped by user"
+  fi
+
+  if [ "$DOWNLOAD_MIHOMO" = "1" ]; then
+    if download_mihomo_core "$tmp_dir" "$mihomo_arch" "/data/adb/box/bin/mihomo" 2>/dev/null; then
+      ui_print "  * mihomo: installed"
+      ok_count=$((ok_count + 1))
+    else
+      ui_print "  * mihomo: failed"
+    fi
+  else
+    ui_print "  * mihomo: skipped by user"
+  fi
+
+  if [ "$DOWNLOAD_XRAY" = "1" ]; then
+    if download_xray_core "$tmp_dir" "$xray_arch" "/data/adb/box/bin/xray" "/data/adb/box/xray" 2>/dev/null; then
+      ui_print "  * xray: installed"
+      ok_count=$((ok_count + 1))
+    else
+      ui_print "  * xray: failed"
+    fi
+  else
+    ui_print "  * xray: skipped by user"
+  fi
+
+  if [ "$ok_count" -eq 0 ]; then
+    ui_print "- Warning: Unable to auto-download cores during installation."
+  fi
+}
+
+choose_core_downloads() {
+  DOWNLOAD_SING_BOX=1
+  DOWNLOAD_MIHOMO=1
+  DOWNLOAD_XRAY=1
+
+  if ! is_true "$BOOTMODE"; then
+    return 0
+  fi
+
+  if ! type chooseport >/dev/null 2>&1; then
+    ui_print "- chooseport is not available, download all cores by default."
+    return 0
+  fi
+
+  ui_print " "
+  ui_print "- Select cores to download during installation:"
+  ui_print "- Vol+ = Yes, Vol- = No"
+
+  if chooseport "Download sing-box core?" "Yes" "No" 1; then
+    DOWNLOAD_SING_BOX=1
+  else
+    DOWNLOAD_SING_BOX=0
+  fi
+
+  if chooseport "Download mihomo core?" "Yes" "No" 1; then
+    DOWNLOAD_MIHOMO=1
+  else
+    DOWNLOAD_MIHOMO=0
+  fi
+
+  if chooseport "Download xray core?" "Yes" "No" 1; then
+    DOWNLOAD_XRAY=1
+  else
+    DOWNLOAD_XRAY=0
+  fi
+}
+
 if ! is_true "$BOOTMODE" ; then
   abort "Error: Please install in Magisk Manager, KernelSU Manager or APatch"
 fi
@@ -56,6 +307,8 @@ fi
 
 mkdir -p /data/adb/box/bin/
 mkdir -p /data/adb/box/run/
+choose_core_downloads
+auto_download_cores_install
 
 mv -f "$MODPATH/box4_service.sh" "$service_dir/"
 

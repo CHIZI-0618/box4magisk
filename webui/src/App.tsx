@@ -20,6 +20,7 @@ export default function App() {
     config,
     appList,
     actionLoading,
+    coreInfo,
     hasChanges,
     handleServiceAction,
     handleToggle,
@@ -56,7 +57,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="h-[calc(100dvh-53px)] overflow-y-auto pb-32 pt-2 scrollbar-hide">
-        {activeTab === 'home' && <TabHome status={status} config={config} handleServiceAction={handleServiceAction} actionLoading={actionLoading} handleChange={handleChange} handleToggle={handleToggle} handleToggleAutoStart={handleToggleAutoStart} />}
+        {activeTab === 'home' && <TabHome status={status} config={config} coreInfo={coreInfo} handleServiceAction={handleServiceAction} actionLoading={actionLoading} handleChange={handleChange} handleToggle={handleToggle} handleToggleAutoStart={handleToggleAutoStart} />}
         {activeTab === 'proxies' && <TabProxies status={status} />}
         {activeTab === 'apps' && <TabApps config={config} handleToggle={handleToggle} handleChange={handleChange} appList={appList} />}
         {activeTab === 'advanced' && <TabAdvanced status={status} config={config} handleToggle={handleToggle} handleChange={handleChange} />}
