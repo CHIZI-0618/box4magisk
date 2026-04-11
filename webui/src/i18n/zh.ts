@@ -55,6 +55,8 @@ export const zh: Record<string, string> = {
   'settings.proxy_tcp': '代理 TCP',
   'settings.proxy_udp': '代理 UDP',
   'settings.ipv6_mode': 'IPv6 模式',
+  'settings.language_section': '语言',
+  'settings.language': '语言',
 
   'proxies.sort.current': '当前排序',
   'proxies.group.missing_details': '当前组有 {count} 个节点存在，但未匹配到详情。',

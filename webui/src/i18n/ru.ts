@@ -60,6 +60,8 @@ export const ru: Record<string, string> = {
   'settings.proxy_tcp': 'Проксировать TCP',
   'settings.proxy_udp': 'Проксировать UDP',
   'settings.ipv6_mode': 'Режим IPv6',
+  'settings.language_section': 'Язык',
+  'settings.language': 'Язык',
 
   'proxies.sort.current': 'Текущая сортировка',
   'proxies.group.missing_details': 'В этой группе есть {count} узлов, но детали не найдены.',

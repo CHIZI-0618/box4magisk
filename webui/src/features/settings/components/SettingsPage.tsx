@@ -4,7 +4,7 @@ import { InputRow, SectionTitle, SelectRow, SwitchRow } from '@/components/ui';
 import { notify, openExternalUrl } from '@/lib/bridge';
 import { ensureFieldVisible } from '@/lib/focus';
 import type { BoxConfig, BoxStatus } from '@/types/box';
-import { t } from '@/i18n';
+import { setLocale, t, useLocale } from '@/i18n';
 
 const IPV6_MODE_OPTIONS = [
   { l: '关闭代理', v: '0' },
@@ -15,6 +15,11 @@ const IPV6_MODE_OPTIONS = [
 const MAC_PROXY_MODE_OPTIONS = [
   { l: '黑名单', v: 'blacklist' },
   { l: '白名单', v: 'whitelist' },
+];
+
+const LANGUAGE_OPTIONS = [
+  { l: 'English', v: 'en' },
+  { l: 'Русский', v: 'ru' },
 ];
 
 const CORE_MAINTAINER = 'CHIZI-0618';
@@ -243,6 +248,7 @@ function MaintainerButton({ label, value, href }: MaintainerButtonProps) {
 
 export function SettingsPage({ status, config, handleToggle, handleChange }: SettingsPageProps) {
   const [activePanel, setActivePanel] = useState<AdvancedPanelKey>(null);
+  const locale = useLocale();
 
   const handleNumberInput = <K extends keyof BoxConfig>(key: K, value: string) => {
     handleChange(key, (value === '' ? '' : Number(value)) as BoxConfig[K]);
@@ -250,6 +256,13 @@ export function SettingsPage({ status, config, handleToggle, handleChange }: Set
 
   return (
     <div className="px-4 space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div>
+        <SectionTitle title={t('settings.language_section')} />
+        <div className="rounded-2xl border border-slate-100 bg-white p-2 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
+          <SelectRow label={t('settings.language')} value={locale} options={LANGUAGE_OPTIONS} onChange={(value: string) => setLocale(value)} />
+        </div>
+      </div>
+
       <div>
         <SectionTitle title={t('settings.panel_entry')} />
         <div className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">

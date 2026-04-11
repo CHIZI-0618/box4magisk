@@ -60,6 +60,8 @@ export const en: Record<string, string> = {
   'settings.proxy_tcp': 'Proxy TCP',
   'settings.proxy_udp': 'Proxy UDP',
   'settings.ipv6_mode': 'IPv6 mode',
+  'settings.language_section': 'Language',
+  'settings.language': 'Language',
 
   'proxies.sort.current': 'Current sort',
   'proxies.group.missing_details': 'There are {count} nodes in this group, but details are missing.',
