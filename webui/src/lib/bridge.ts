@@ -70,24 +70,34 @@ export async function openExternalUrl(url: string) {
   }
 }
 
-export function discoverPackages(): AppInfo[] {
+export async function discoverPackages(): Promise<AppInfo[]> {
   try {
     const pkgs = listPackages?.("all");
-    if (!Array.isArray(pkgs)) return [];
-    const validPkgs = pkgs.filter(v => typeof v === 'string' && v.trim().length > 0);
-    const rows = getPackagesInfo?.(validPkgs) as Array<Partial<AppInfo> & { packageName?: string }>;
-    if (!Array.isArray(rows)) return [];
+    if (Array.isArray(pkgs) && pkgs.length > 0) {
+      const rows = getPackagesInfo?.(pkgs.filter(v => typeof v === 'string' && v.trim().length > 0)) as Array<Partial<AppInfo> & { packageName?: string }>;
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows.filter((entry): entry is Partial<AppInfo> & { packageName: string } => typeof entry === 'object' && entry !== null && typeof entry.packageName === 'string')
+          .map(entry => ({
+            packageName: entry.packageName,
+            appLabel: (entry.appLabel?.trim() || entry.packageName),
+            isSystem: Boolean(entry.isSystem),
+          }))
+          .sort((a, b) => {
+            if (a.isSystem !== b.isSystem) return Number(a.isSystem) - Number(b.isSystem);
+            return a.appLabel.localeCompare(b.appLabel, "zh-CN");
+          });
+      }
+    }
 
-    return rows.filter((entry): entry is Partial<AppInfo> & { packageName: string } => typeof entry === 'object' && entry !== null && typeof entry.packageName === 'string')
-      .map(entry => ({
-        packageName: entry.packageName,
-        appLabel: (entry.appLabel?.trim() || entry.packageName),
-        isSystem: Boolean(entry.isSystem),
-      }))
-      .sort((a, b) => {
-        if (a.isSystem !== b.isSystem) return Number(a.isSystem) - Number(b.isSystem);
-        return a.appLabel.localeCompare(b.appLabel, "zh-CN");
-      });
+    const result = await exec("pm list packages -3 | sed 's/^package:/user:/' ; pm list packages -s | sed 's/^package:/system:/'");
+    return String(result.stdout ?? '').split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => /^(user|system):/.test(line))
+      .map(line => ({
+        packageName: line.replace(/^(user|system):/, ''),
+        appLabel: line.replace(/^(user|system):/, ''),
+        isSystem: line.startsWith('system:'),
+      }));
   } catch {
     return [];
   }

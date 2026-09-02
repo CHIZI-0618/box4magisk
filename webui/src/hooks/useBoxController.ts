@@ -70,7 +70,7 @@ export function useBoxController(): BoxControllerState {
       }
 
       setTimeout(() => {
-        setAppList(discoverPackages());
+        void discoverPackages().then(setAppList);
       }, 50);
 
       if (statusResult.status === 'rejected' && configResult.status === 'rejected') {
