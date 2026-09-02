@@ -32,7 +32,7 @@ export function TabApps({ config, handleToggle, handleChange, appList }: TabApps
   const rawString = config?.[currentListKey] || '';
 
   const checkedSet = useMemo(() => {
-    return new Set(String(rawString).split('\n').map(s => s.trim()).filter(Boolean));
+    return new Set(String(rawString).split(/\s+/).filter(Boolean));
   }, [rawString]);
 
   const filteredApps = useMemo(() => {
