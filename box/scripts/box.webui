@@ -18,8 +18,7 @@ json_escape() {
         -e 's/\\/\\\\/g' \
         -e 's/"/\\"/g' \
         -e 's/	/\\t/g' \
-        -e 's/\r/\\r/g' \
-        -e ':a;N;$!ba;s/\n/\\n/g'
+        -e 's/\r/\\r/g'
 }
 
 json_bool() {
