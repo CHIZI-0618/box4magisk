@@ -170,6 +170,7 @@ load_config() {
 
     log Info "Loading configuration from environment or defaults..."
 
+    [ "$CLI_DRY_RUN" -eq 1 ] && DRY_RUN=1
     DRY_RUN="${DRY_RUN:-$DEFAULT_DRY_RUN}"
     CORE_USER_GROUP="${CORE_USER_GROUP:-$DEFAULT_CORE_USER_GROUP}"
     ROUTING_MARK="${ROUTING_MARK:-$DEFAULT_ROUTING_MARK}"
@@ -915,6 +916,11 @@ setup_proxy_chain() {
     if [ "$bypass_success" -eq 0 ]; then
         log Error "Core traffic bypass not configured, may cause traffic loop"
     fi
+    if [ "$PROXY_HOTSPOT" -eq 0 ] && check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
+        $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -m owner --uid-owner dns_tether -j ACCEPT
+        log Info "Added hotspot DNS bypass for dns_tether"
+    fi
+
 
     # Pre-check performance mode with conntrack
     local _perf_ct=0
@@ -1798,7 +1804,7 @@ parse_args() {
                 MAIN_CMD="$1"
                 ;;
             --dry-run)
-                DRY_RUN=1
+                CLI_DRY_RUN=1
                 ;;
             --verbose)
                 VERBOSE=1
@@ -1902,6 +1908,7 @@ main() {
 
 # Pre-initialize variables for set -u safety
 DRY_RUN=0
+CLI_DRY_RUN=0
 VERBOSE=0
 CONFIG_DIR=""
 USE_TPROXY=0
