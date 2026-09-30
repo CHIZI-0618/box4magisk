@@ -74,7 +74,7 @@ selectMode() {
                 target="${direct_outbound}"
             fi
             getNowOutbound > "${run_path}/.lastOutbound"
-            setOutbound "${select_outbound}" "${direct_outbound}"
+            setOutbound "${select_outbound}" "${target}"
         elif [ "${sta}" = 2 ] || [ "${sta}" = 3 ]; then
             sleep 1
             selectMode $@
